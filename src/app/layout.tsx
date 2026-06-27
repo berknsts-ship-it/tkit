@@ -17,7 +17,19 @@ const nunito = Nunito({
 
 export const metadata: Metadata = {
   title: "T-Kit — платформа для репетиторов",
-  description: "Инструменты для репетиторов: расписание, домашние задания, интерактивная доска",
+  description: "Расписание, домашние задания, интерактивная доска и словарь — всё для онлайн-репетитора в одном месте",
+  openGraph: {
+    title: "T-Kit — платформа для репетиторов",
+    description: "Расписание, домашние задания, интерактивная доска и словарь — всё в одном месте",
+    siteName: "T-Kit",
+    locale: "ru_RU",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "T-Kit — платформа для репетиторов",
+    description: "Расписание, домашние задания, интерактивная доска и словарь — всё в одном месте",
+  },
   appleWebApp: {
     capable: true,
     title: "T-Kit",
