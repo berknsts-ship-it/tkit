@@ -59,7 +59,7 @@ h1, h2, h3, h4 {
 
 .quick-action:hover {
   border-color: var(--brown-light) !important;
-  background: linear-gradient(135deg, #fdf8f0 0%, #f5e6ca 100%);
+  background: var(--gradient-soft) !important;
   box-shadow: var(--shadow-hover) !important;
   transform: translateY(-1px);
 }

@@ -1,22 +1,26 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getEffectiveTutorId } from "@/lib/creatorMode";
 import Link from "next/link";
 import { deleteArticle } from "@/app/actions/reference";
 
 export default async function ReferencePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const tutorId = await getEffectiveTutorId(user!);
+  const db = createAdminClient();
 
-  const { data: articles } = await supabase
+  const { data: articles } = await db
     .from("reference_articles")
     .select("id, title, assign_to_all, updated_at, reference_article_students(student_id)")
-    .eq("tutor_id", user!.id)
+    .eq("tutor_id", tutorId)
     .order("sort_order")
     .order("created_at");
 
-  const { data: students } = await supabase
+  const { data: students } = await db
     .from("students")
     .select("id, name")
-    .eq("tutor_id", user!.id)
+    .eq("tutor_id", tutorId)
     .order("name");
 
   const studentMap = Object.fromEntries((students ?? []).map(s => [s.id, s.name]));

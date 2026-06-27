@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import TKitLogo from "@/components/TKitLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,9 +33,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-lora), Georgia, serif" }}>
-            T-Kit
-          </h1>
+          <TKitLogo size="lg" />
           <p className="mt-2" style={{ color: "var(--brown-mid)" }}>Вход для репетитора</p>
         </div>
 

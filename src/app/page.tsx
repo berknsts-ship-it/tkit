@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TKitLogo from "@/components/TKitLogo";
 
 export default function LandingPage() {
   return (
@@ -10,10 +11,12 @@ export default function LandingPage() {
         borderColor: "var(--brown-pale)",
         background: "rgba(253, 248, 240, 0.9)",
       }}>
-        <span className="text-xl font-bold" style={{ fontFamily: "var(--font-lora), Georgia, serif" }}>
-          T-Kit
-        </span>
+        <TKitLogo size="md" />
         <div className="flex gap-3">
+          <Link href="/student" className="px-4 py-2 rounded-xl text-sm font-medium border transition-all hover:opacity-80"
+            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
+            Я ученик
+          </Link>
           <Link href="/auth/login" className="px-4 py-2 rounded-xl text-sm font-medium border transition-all hover:opacity-80"
             style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
             Войти

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import TKitLogo from "@/components/TKitLogo";
 
 export default function StudentEntryPage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function StudentEntryPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm text-center">
-        <h1 className="text-3xl font-bold mb-2">T-Kit</h1>
+        <div className="flex justify-center mb-2"><TKitLogo size="lg" /></div>
         <p className="mb-8" style={{ color: "var(--brown-mid)" }}>Введи свой код доступа</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

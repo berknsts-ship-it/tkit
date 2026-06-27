@@ -18,25 +18,34 @@ CREATE TABLE IF NOT EXISTS tutors (
 
 -- Ученики
 CREATE TABLE IF NOT EXISTS students (
-  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  tutor_id      UUID REFERENCES tutors(id) ON DELETE CASCADE NOT NULL,
-  name          TEXT NOT NULL,
-  access_code   TEXT UNIQUE NOT NULL,
-  notes         TEXT,
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tutor_id            UUID REFERENCES tutors(id) ON DELETE CASCADE NOT NULL,
+  name                TEXT NOT NULL,
+  access_code         TEXT UNIQUE NOT NULL,
+  notes               TEXT,
+  default_price_rub   INT,
+  created_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration (run once if students table already exists):
+-- ALTER TABLE students ADD COLUMN IF NOT EXISTS default_price_rub INT;
 
 -- Занятия / расписание
 CREATE TABLE IF NOT EXISTS lessons (
-  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  tutor_id      UUID REFERENCES tutors(id) ON DELETE CASCADE NOT NULL,
-  student_id    UUID REFERENCES students(id) ON DELETE CASCADE NOT NULL,
-  scheduled_at  TIMESTAMPTZ NOT NULL,
-  duration_min  INT DEFAULT 60,
-  status        TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled')),
-  notes         TEXT,
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tutor_id        UUID REFERENCES tutors(id) ON DELETE CASCADE NOT NULL,
+  student_id      UUID REFERENCES students(id) ON DELETE CASCADE NOT NULL,
+  scheduled_at    TIMESTAMPTZ NOT NULL,
+  duration_min    INT DEFAULT 60,
+  status          TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled', 'rescheduled', 'missed')),
+  payment_status  TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('paid', 'unpaid')),
+  price_rub       INT,
+  notes           TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+-- Migration (run once if table already exists):
+-- ALTER TABLE lessons ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('paid', 'unpaid'));
+-- ALTER TABLE lessons ADD COLUMN IF NOT EXISTS price_rub INT;
 
 -- Домашние задания
 CREATE TABLE IF NOT EXISTS homework (
@@ -67,8 +76,11 @@ CREATE TABLE IF NOT EXISTS vocabulary_topics (
   tutor_id      UUID REFERENCES tutors(id) ON DELETE CASCADE NOT NULL,
   student_id    UUID REFERENCES students(id) ON DELETE CASCADE,
   title         TEXT NOT NULL,
+  language      TEXT NOT NULL DEFAULT 'en-US',
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+-- Migration (run once if table already exists):
+-- ALTER TABLE vocabulary_topics ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en-US';
 
 -- Слова в теме (PRO)
 CREATE TABLE IF NOT EXISTS vocabulary_words (
@@ -218,3 +230,47 @@ BEGIN
   WHERE s.access_code = p_code;
 END;
 $$;
+
+-- ============================================================
+-- Supabase Storage: создай bucket "board-images" (public) в Storage → Buckets
+-- Policy: INSERT для auth.role() = 'authenticated', SELECT для all
+-- ============================================================
+
+-- ============================================================
+-- Конспекты уроков (снэпшоты доски)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS board_snapshots (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tutor_id    UUID REFERENCES tutors(id) ON DELETE CASCADE NOT NULL,
+  student_id  UUID REFERENCES students(id) ON DELETE CASCADE NOT NULL,
+  lesson_id   UUID REFERENCES lessons(id) ON DELETE SET NULL,   -- необязательно
+  title       TEXT NOT NULL DEFAULT '',
+  items       JSONB NOT NULL DEFAULT '[]',
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE board_snapshots ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "snapshots_by_tutor" ON board_snapshots
+  FOR ALL USING (auth.uid() = tutor_id);
+
+-- ============================================================
+-- Сообщения поддержки
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS support_messages (
+  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email      TEXT,
+  message    TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE support_messages ENABLE ROW LEVEL SECURITY;
+
+-- Любой может отправить сообщение
+CREATE POLICY "anyone_can_insert_support" ON support_messages
+  FOR INSERT WITH CHECK (true);
+
+-- Читать могут только через service_role (Supabase Dashboard)
