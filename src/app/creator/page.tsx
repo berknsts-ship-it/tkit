@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isCreator } from "@/lib/creatorMode";
 import { setViewAs } from "@/app/actions/creator";
+import { listBetaCodes } from "@/app/actions/beta";
+import BetaCodesPanel from "./BetaCodesPanel";
 import Link from "next/link";
 
 export default async function CreatorPage() {
@@ -17,13 +19,15 @@ export default async function CreatorPage() {
     .select("id, name, email, plan, subject, created_at")
     .order("created_at", { ascending: false });
 
-  const { count: totalStudents } = await admin
-    .from("students")
-    .select("*", { count: "exact", head: true });
-
-  const { count: totalLessons } = await admin
-    .from("lessons")
-    .select("*", { count: "exact", head: true });
+  const [
+    { count: totalStudents },
+    { count: totalLessons },
+    betaCodes,
+  ] = await Promise.all([
+    admin.from("students").select("*", { count: "exact", head: true }),
+    admin.from("lessons").select("*", { count: "exact", head: true }),
+    listBetaCodes(),
+  ]);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--brown-dark)" }}>
@@ -57,6 +61,12 @@ export default async function CreatorPage() {
               <div className="text-sm mt-1" style={{ color: "var(--brown-mid)" }}>{s.label}</div>
             </div>
           ))}
+        </div>
+
+        {/* Бета-коды */}
+        <h2 className="text-lg font-semibold mb-3">Бета-коды</h2>
+        <div className="mb-8">
+          <BetaCodesPanel initial={betaCodes as unknown as Parameters<typeof BetaCodesPanel>[0]["initial"]} />
         </div>
 
         {/* Список репетиторов */}

@@ -257,6 +257,21 @@ CREATE POLICY "snapshots_by_tutor" ON board_snapshots
   FOR ALL USING (auth.uid() = tutor_id);
 
 -- ============================================================
+-- Бета-коды доступа
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS beta_codes (
+  code        TEXT PRIMARY KEY,
+  note        TEXT,
+  used_by     UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Доступно только через service_role (admin client)
+ALTER TABLE beta_codes ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================
 -- Сообщения поддержки
 -- ============================================================
 
