@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { deleteStudent } from "@/app/actions/students";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
+import CopyStudentLink from "@/components/tutor/CopyStudentLink";
 
 export default async function StudentsPage() {
   const supabase = await createClient();
@@ -91,12 +92,13 @@ export default async function StudentsPage() {
                 )}
                 {debt === 0 && Object.prototype.hasOwnProperty.call(debtMap, s.id) === false && null}
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <div className="text-sm font-mono px-3 py-1 rounded-lg" style={{
                     background: "var(--brown-pale)", color: "var(--brown-dark)"
                   }}>
                     {s.access_code}
                   </div>
+                  <CopyStudentLink code={s.access_code} />
                   <Link
                     href={`/student/${s.access_code}`}
                     target="_blank"
