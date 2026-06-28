@@ -81,6 +81,38 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
 
+      {/* ── Полноэкранный оверлей: Доска + просмотр конспекта ── */}
+      {(tab === "board" || (tab === "notes" && viewSnapshot)) && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "white", display: "flex", flexDirection: "column" }}>
+          <div className="flex items-center gap-3 px-4 shrink-0"
+            style={{ height: 48, borderBottom: "1px solid var(--brown-pale)", background: "white" }}>
+            <button
+              onClick={() => tab === "notes" ? setViewSnapshot(null) : setTab("lessons")}
+              className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg border hover:opacity-80"
+              style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
+              ← Назад
+            </button>
+            {tab === "notes" && viewSnapshot && (
+              <span className="text-sm font-medium truncate" style={{ color: "var(--brown-dark)" }}>
+                {snapshots.find(s => s.id === viewSnapshot)?.title}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {tab === "board" && (
+              <>
+                <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="student" materials={materials} />
+                <SyncedAudio roomId={studentId} role="student" />
+                <SyncedVideo roomId={studentId} role="student" />
+              </>
+            )}
+            {tab === "notes" && viewSnapshot && (
+              <WhiteboardCanvas ref={canvasRef} roomId={`snapshot-${viewSnapshot}`} role="student" materials={[]} />
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Hero ── */}
       <div className="relative overflow-hidden px-5 pt-8 pb-6" style={{ background: theme.gradient }}>
 
@@ -184,31 +216,7 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
           ))
         )}
 
-        {tab === "board" && (
-          <div className="-mx-4 -my-5 flex flex-col" style={{ height: "calc(100vh - 180px)" }}>
-            <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="student" materials={materials} />
-            <SyncedAudio roomId={studentId} role="student" />
-            <SyncedVideo roomId={studentId} role="student" />
-          </div>
-        )}
-
-        {tab === "notes" && (
-          viewSnapshot ? (
-            <div className="-mx-4 -my-5 flex flex-col" style={{ height: "calc(100vh - 180px)" }}>
-              <div className="flex items-center gap-3 px-4 py-2 border-b shrink-0"
-                style={{ borderColor: "var(--brown-pale)", background: "white" }}>
-                <button onClick={() => setViewSnapshot(null)}
-                  className="text-sm px-3 py-1 rounded-lg border hover:opacity-80"
-                  style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
-                  ← Назад
-                </button>
-                <span className="text-sm font-medium" style={{ color: "var(--brown-dark)" }}>
-                  {snapshots.find(s => s.id === viewSnapshot)?.title}
-                </span>
-              </div>
-              <WhiteboardCanvas ref={canvasRef} roomId={`snapshot-${viewSnapshot}`} role="student" materials={[]} />
-            </div>
-          ) : snapshots.length === 0 ? (
+        {tab === "notes" && (snapshots.length === 0 ? (
             <EmptyState icon="📓" title="Конспектов пока нет" sub="Репетитор сохранит конспекты после уроков" />
           ) : (
             <div className="space-y-2">
