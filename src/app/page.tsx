@@ -17,14 +17,13 @@ export default function LandingPage() {
             style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
             Я ученик
           </Link>
-          <Link href="/auth/login" className="px-3 sm:px-4 py-2 rounded-xl text-sm font-medium border transition-all hover:opacity-80"
+          <Link href="/auth/login" className="px-4 py-2 rounded-xl text-sm font-medium border transition-all hover:opacity-80"
             style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
             Войти
           </Link>
-          <Link href="/auth/register" className="px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+          <Link href="/auth/register" className="hidden sm:block px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
             style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-button)" }}>
-            <span className="hidden sm:inline">Попробовать бесплатно</span>
-            <span className="sm:hidden">Начать</span>
+            Попробовать бесплатно
           </Link>
         </div>
       </header>
