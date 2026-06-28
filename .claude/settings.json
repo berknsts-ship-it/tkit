@@ -4,7 +4,8 @@
       "Bash(node -e \"const l = require\\('lucide-react'\\); console.log\\(typeof l.Navigation, typeof l.Maximize2, typeof l.Hand\\)\")",
       "Bash(npx tsc *)",
       "Bash(cd /Users/anastasia/wordbox && npm install pdfjs-dist --legacy-peer-deps 2>&1 | tail -5)",
-      "Read(//Users/anastasia/wordbox/**)"
+      "Read(//Users/anastasia/wordbox/**)",
+      "Bash(find /Users/anastasia/wordbox -name \"*.sql\" ! -path \"*/node_modules/*\" | xargs grep -l \"lessons\\\\|lesson\" 2>/dev/null)"
     ],
     "defaultMode": "bypassPermissions"
   }

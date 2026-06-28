@@ -923,6 +923,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [fnFormula,   setFnFormula]   = useState("");
   const [fnError,     setFnError]     = useState(false);
   const [showFnPanel, setShowFnPanel] = useState(false);
+  const [isMobile,    setIsMobile]    = useState(false);
 
   // undo/redo
   type HistoryEntry =
@@ -1116,6 +1117,22 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     ctx.restore();
     renderMinimapFnRef.current();
   }, [shapeKind, color, size, shapeFill, frameShape, frameColor, frameFill, frameOpacity, frameBorderWidth]);
+
+  // ── mobile detection ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // ── resize textarea when font size changes (A+/A- buttons) ──────────────────
+  useEffect(() => {
+    const ta = textRef.current;
+    if (!ta || !textInput) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }, [fontSize, textInput]);
 
   // ── resize observer — DPR-aware canvas sizing ────────────────────────────────
   useEffect(() => {
@@ -3656,8 +3673,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   className="px-3 h-8 rounded-xl text-xs font-semibold text-white shrink-0"
                   style={{ background:"var(--gradient-primary)" }}>Готово</button>
               </div>
-              {/* ── Inline textarea — Miro-style: transparent, with corner handles ── */}
-              {(() => {
+              {/* ── Inline textarea — Miro-style: desktop only ── */}
+              {!isMobile && (() => {
                 const handleStyle: React.CSSProperties = {
                   position:"absolute", width:10, height:10, borderRadius:"50%",
                   background:"white", border:"2px solid #4a80f0", pointerEvents:"none",
@@ -3706,6 +3723,73 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     <div style={{ ...handleStyle, top:-5, right:-5 }}/>
                     <div style={{ ...handleStyle, bottom:-5, left:-5 }}/>
                     <div style={{ ...handleStyle, bottom:-5, right:-5 }}/>
+                  </div>
+                );
+              })()}
+
+              {/* ── Mobile bottom sheet — fixed, keyboard-aware, escapes overflow-hidden ── */}
+              {isMobile && (() => {
+                const cancel = () => { setTextInput(null); editingIdRef.current=null; setEditingId(null); render(); };
+                return (
+                  <div style={{ position:"fixed", inset:0, zIndex:300, touchAction:"auto" }} onClick={cancel}
+                    onTouchStart={e=>e.stopPropagation()} onTouchMove={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
+                    <div style={{
+                      position:"absolute", bottom:0, left:0, right:0,
+                      background:"white", borderRadius:"20px 20px 0 0",
+                      borderTop:"2px solid #e8ddd2",
+                      boxShadow:"0 -4px 24px rgba(0,0,0,0.15)",
+                    }} onClick={e => e.stopPropagation()}>
+                      {/* Controls */}
+                      <div style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 12px", borderBottom:"1px solid #e8ddd2", overflowX:"auto", touchAction:"pan-x" }}>
+                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.max(8,s-2))}
+                          style={{ minWidth:36, height:36, borderRadius:8, border:"1.5px solid #e8ddd2", fontSize:13, fontWeight:"bold", color:"#3A2117", background:"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>A−</button>
+                        <span style={{ fontSize:13, color:"#3A2117", width:30, textAlign:"center", flexShrink:0 }}>{fontSize}</span>
+                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.min(200,s+2))}
+                          style={{ minWidth:36, height:36, borderRadius:8, border:"1.5px solid #e8ddd2", fontSize:13, fontWeight:"bold", color:"#3A2117", background:"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>A+</button>
+                        <div style={{ width:1, height:24, background:"#e8ddd2", flexShrink:0 }}/>
+                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setBold(b=>!b)}
+                          style={{ width:36, height:36, borderRadius:8, border:`1.5px solid ${bold?"#4a80f0":"#e8ddd2"}`, fontWeight:"bold", fontSize:15, color:"#3A2117", background:bold?"#eef2ff":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>B</button>
+                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setItalic(i=>!i)}
+                          style={{ width:36, height:36, borderRadius:8, border:`1.5px solid ${italic?"#4a80f0":"#e8ddd2"}`, fontStyle:"italic", fontFamily:"Georgia,serif", fontSize:15, color:"#3A2117", background:italic?"#eef2ff":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>I</button>
+                        <label style={{ position:"relative", width:36, height:36, borderRadius:8, border:"1.5px solid #e8ddd2", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, gap:2 }}>
+                          <span style={{ fontWeight:"bold", fontSize:14, color, lineHeight:"1" }}>A</span>
+                          <div style={{ width:20, height:3, borderRadius:2, background:color }}/>
+                          <input type="color" value={color} onChange={e=>setColor(e.target.value)} style={{ position:"absolute", opacity:0, inset:0, cursor:"pointer" }}/>
+                        </label>
+                        <div style={{ flex:1 }}/>
+                        <button onPointerDown={e=>e.preventDefault()} onClick={cancel}
+                          style={{ height:36, padding:"0 12px", borderRadius:10, border:"1.5px solid #e8ddd2", fontSize:13, color:"#3A2117", background:"white", flexShrink:0 }}>Отмена</button>
+                        <button onPointerDown={e=>e.preventDefault()} onClick={commitText}
+                          style={{ height:36, padding:"0 14px", borderRadius:10, fontSize:13, fontWeight:600, color:"white", background:"linear-gradient(135deg,#74070E,#a01018)", border:"none", flexShrink:0 }}>Готово</button>
+                      </div>
+                      {/* Textarea — keyboard pushes this up naturally on mobile */}
+                      <div style={{ padding:"10px 14px 24px" }}>
+                        <textarea
+                          ref={textRef}
+                          value={textValue}
+                          onChange={e => {
+                            setTextValue(e.target.value);
+                            const ta = e.target;
+                            ta.style.height = "auto";
+                            ta.style.height = ta.scrollHeight + "px";
+                          }}
+                          placeholder="Введите текст..."
+                          autoFocus
+                          rows={2}
+                          style={{
+                            width:"100%", boxSizing:"border-box",
+                            fontSize: Math.min(fontSize, 28)+"px",
+                            fontFamily: FONTS[fontIdx].family,
+                            fontWeight: bold?"bold":"normal",
+                            fontStyle: italic?"italic":"normal",
+                            color,
+                            border:"1.5px solid #e8ddd2", borderRadius:12,
+                            padding:"10px 12px", resize:"none", outline:"none", lineHeight:1.5,
+                            overflow:"hidden",
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
@@ -4077,35 +4161,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         </div>
         {/* Row 2: context — sizes + colors / shapes / ruling */}
         <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto" style={{ touchAction:"pan-x" }}>
-          {/* Text controls — mobile only, shown while text input is active */}
-          {(tool==="text" || textInput) && textInput && (
-            <div className="flex items-center gap-1 w-full shrink-0">
-              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.max(8,s-2))}
-                className="w-9 h-9 rounded-lg border-2 text-sm font-bold shrink-0 flex items-center justify-center"
-                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>A−</button>
-              <span className="text-sm w-8 text-center shrink-0 tabular-nums" style={{ color:"var(--brown-dark)" }}>{fontSize}</span>
-              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.min(200,s+2))}
-                className="w-9 h-9 rounded-lg border-2 text-sm font-bold shrink-0 flex items-center justify-center"
-                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>A+</button>
-              <div className="w-px self-stretch mx-0.5" style={{ background:"var(--brown-pale)" }}/>
-              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setBold(b=>!b)}
-                className="w-9 h-9 rounded-lg border-2 text-base font-bold shrink-0 flex items-center justify-center"
-                style={{ borderColor:bold?"#4a80f0":"var(--brown-pale)", background:bold?"#eef2ff":"white", color:"var(--brown-dark)" }}>B</button>
-              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setItalic(i=>!i)}
-                className="w-9 h-9 rounded-lg border-2 text-base italic shrink-0 flex items-center justify-center"
-                style={{ fontFamily:"Georgia,serif", borderColor:italic?"#4a80f0":"var(--brown-pale)", background:italic?"#eef2ff":"white", color:"var(--brown-dark)" }}>I</button>
-              <label className="relative w-9 h-9 rounded-lg border-2 shrink-0 flex items-center justify-center cursor-pointer"
-                style={{ borderColor:"var(--brown-pale)" }}>
-                <span className="text-base font-bold leading-none" style={{ color }}>A</span>
-                <input type="color" value={color} onChange={e=>setColor(e.target.value)}
-                  className="absolute opacity-0 inset-0 cursor-pointer"/>
-              </label>
-              <div className="flex-1"/>
-              <button onPointerDown={e=>e.preventDefault()} onClick={commitText}
-                className="px-4 h-9 rounded-xl text-sm font-semibold text-white shrink-0"
-                style={{ background:"var(--gradient-primary)" }}>Готово</button>
-            </div>
-          )}
           {/* Brush sizes for pen/highlight/eraser/shape */}
           {(tool==="pen"||tool==="eraser"||tool==="highlight"||tool==="shape") && (
             <div className="flex gap-1 shrink-0">
