@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import { flushSync } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
@@ -1827,7 +1828,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         setSelectedId(hit.id);
         setSelectedIds(new Set([hit.id]));
         selDragRef.current = { mode: "move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit } };
-        setTouchDragging(true);
+        flushSync(() => setTouchDragging(true));
       }
       return;
     }
