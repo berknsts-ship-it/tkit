@@ -3452,24 +3452,40 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
               )}
-              {/* Duplicate + Crop buttons (top-right area) */}
+              {/* Duplicate + Crop + Delete buttons (top-right area) */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
                 style={{ top:-28, right:0 }}>
-                <button onMouseDown={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
-                  className="rounded-lg px-2 py-0.5 text-xs font-medium border hover:opacity-80"
-                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>⧉ Дубль</button>
+                  className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
+                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>⧉</button>
                 {selectedItem.type === "image" && (
-                  <button onMouseDown={e=>e.stopPropagation()} onClick={() => setCropId(selectedItem.id)}
-                    className="rounded-lg px-2 py-0.5 text-xs font-medium border hover:opacity-80"
-                    style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>✂ Обрезать</button>
+                  <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onClick={() => setCropId(selectedItem.id)}
+                    className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
+                    style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>✂</button>
                 )}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
+                  onClick={() => {
+                    setSelectedIds(ids => {
+                      const toRemove = ids.size > 0 ? ids : new Set([selectedItem.id]);
+                      pushHistory({ type:"clear", saved:[...itemsRef.current] });
+                      itemsRef.current = itemsRef.current.filter(i => !toRemove.has(i.id));
+                      render(); send({ type:"clear" });
+                      itemsRef.current.forEach(item => send({ type:"path", item }));
+                      setSelectedId(null);
+                      return new Set();
+                    });
+                  }}
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-white hover:opacity-80 flex items-center justify-center"
+                  style={{ background:"#e05030", minHeight:28, minWidth:28 }}>
+                  <Trash2 size={12}/>
+                </button>
               </div>
-              {/* Edit button — text double-click (not for symbols/emojis) */}
+              {/* Edit button — text (mobile-friendly size) */}
               {selectedItem.type === "text" && !selectedItem.isSymbol && !(selectedItem.align === "center" && [...selectedItem.text].every(c => c.codePointAt(0)! > 127)) && (
-                <button className="absolute pointer-events-auto flex items-center justify-center rounded"
-                  style={{ right:-10, top:-10, width:22, height:22, zIndex:31, cursor:"pointer",
-                    background:"#4a80f0", border:"none" }}
+                <button className="absolute pointer-events-auto flex items-center justify-center rounded-lg"
+                  style={{ right:-14, top:-14, width:34, height:34, zIndex:31, cursor:"pointer",
+                    background:"#4a80f0", border:"2px solid white", boxShadow:"0 2px 8px rgba(74,128,240,0.4)" }}
                   onMouseDown={e => e.stopPropagation()}
                   onClick={() => {
                     const ti = selectedItem as TextItem;
@@ -3485,7 +3501,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                       ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px";
                     }, 30);
                   }}>
-                  <Pencil size={11} color="white"/>
+                  <Pencil size={14} color="white"/>
                 </button>
               )}
               {/* Resize handle — text only */}
@@ -3531,16 +3547,25 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     return (
                       <div key={corner} className="absolute pointer-events-auto"
                         style={{
-                          [isRight?"right":"left"]: -7,
-                          [isBottom?"bottom":"top"]: -7,
-                          width:14, height:14, cursor:`${corner}-resize`,
+                          [isRight?"right":"left"]: -10,
+                          [isBottom?"bottom":"top"]: -10,
+                          width:20, height:20, cursor:`${corner}-resize`,
                           background:"white", border:"2px solid #4a80f0", borderRadius:3, zIndex:32,
+                          touchAction:"none",
                         }}
                         onMouseDown={e => {
                           e.stopPropagation();
                           const rect = containerRef.current!.getBoundingClientRect();
                           const ww = (e.clientX - rect.left - viewRef.current.panX) / viewRef.current.zoom;
                           const wh = (e.clientY - rect.top  - viewRef.current.panY) / viewRef.current.zoom;
+                          selDragRef.current = { mode, id: selectedItem.id, corner,
+                            wx0: ww, wy0: wh, origItem: { ...selectedItem } };
+                        }}
+                        onTouchStart={e => {
+                          e.stopPropagation(); e.preventDefault();
+                          const rect = containerRef.current!.getBoundingClientRect();
+                          const ww = (e.touches[0].clientX - rect.left - viewRef.current.panX) / viewRef.current.zoom;
+                          const wh = (e.touches[0].clientY - rect.top  - viewRef.current.panY) / viewRef.current.zoom;
                           selDragRef.current = { mode, id: selectedItem.id, corner,
                             wx0: ww, wy0: wh, origItem: { ...selectedItem } };
                         }}/>
@@ -4161,6 +4186,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         </div>
         {/* Row 2: context — sizes + colors / shapes / ruling */}
         <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto" style={{ touchAction:"pan-x" }}>
+          {/* Text tool hint */}
+          {tool==="text" && !textInput && (
+            <div className="flex items-center gap-2 text-xs shrink-0" style={{ color:"var(--brown-light)" }}>
+              <Type size={13} style={{ color:"var(--brown-mid)" }}/>
+              Нажмите на доску, чтобы добавить текст
+            </div>
+          )}
           {/* Brush sizes for pen/highlight/eraser/shape */}
           {(tool==="pen"||tool==="eraser"||tool==="highlight"||tool==="shape") && (
             <div className="flex gap-1 shrink-0">
