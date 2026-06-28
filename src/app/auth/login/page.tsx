@@ -78,7 +78,7 @@ export default function LoginPage() {
       {/* Карточка */}
       <div className="w-full max-w-sm relative z-10">
         <div className="flex flex-col items-center mb-8">
-          <TKitLogo size="lg" />
+          <TKitLogo size="lg" subtitle />
           <p className="mt-3 text-sm" style={{ color: "var(--brown-mid)" }}>Вход для репетитора</p>
         </div>
 

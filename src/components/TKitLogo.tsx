@@ -1,71 +1,88 @@
 interface TKitLogoProps {
-  size?:       "sm" | "md" | "lg";
-  gradient?:   string;  // override CSS var, for themed pages
-  color?:      string;  // Kit text color override
-  transition?: boolean; // animate color changes (register page)
+  size?:      "sm" | "md" | "lg";
+  gradient?:  string;
+  color?:     string;
+  transition?: boolean;
+  subtitle?:  boolean;
 }
 
 const SIZES = {
-  sm: { box: 24, radius: 7,  fontSize: 13, gap: 6,  kit: "0.875rem" },
-  md: { box: 30, radius: 9,  fontSize: 17, gap: 8,  kit: "1.1rem"   },
-  lg: { box: 44, radius: 13, fontSize: 25, gap: 11, kit: "1.6rem"   },
+  sm: { icon: 28, fontSize: 14, sub: 9,  gap: 7  },
+  md: { icon: 36, fontSize: 18, sub: 11, gap: 9  },
+  lg: { icon: 52, fontSize: 26, sub: 13, gap: 12 },
 };
 
 export default function TKitLogo({
   size = "md",
-  gradient,
   color,
   transition = false,
+  subtitle = false,
 }: TKitLogoProps) {
   const s = SIZES[size];
-  const tr = transition ? "background 0.7s ease, box-shadow 0.7s ease" : undefined;
   const trText = transition ? "color 0.7s ease" : undefined;
+
+  // T-shape proportions (relative to icon size = 1 unit)
+  const W = s.icon;          // total width of icon
+  const H = Math.round(W * 1.18); // total height ~118% of width
+  const barH = Math.round(H * 0.32);  // crossbar height
+  const stemW = Math.round(W * 0.43); // stem width
+  const stemX = Math.round((W - stemW) / 2); // stem x (centered)
+  const accentSize = Math.round(barH * 0.68); // accent square size
+
+  const dark   = color ?? "#3b2a1a";
+  const accent = "#7c3a1e";
 
   return (
     <div className="flex items-center" style={{ gap: s.gap, lineHeight: 1 }}>
-      {/* Бейдж с T */}
-      <div
-        style={{
-          background:   gradient ?? "var(--gradient-primary)",
-          width:        s.box,
-          height:       s.box,
-          borderRadius: s.radius,
-          display:      "flex",
-          alignItems:   "center",
-          justifyContent: "center",
-          boxShadow:    "0 2px 8px rgba(0,0,0,0.18)",
-          flexShrink:   0,
-          transition:   tr,
-        }}
-      >
-        <span
-          style={{
-            color:      "white",
-            fontFamily: "var(--font-lora), Georgia, serif",
-            fontWeight: 700,
-            fontSize:   s.fontSize,
-            fontStyle:  "italic",
-            lineHeight: 1,
-            userSelect: "none",
-          }}
-        >
-          T
-        </span>
-      </div>
+      {/* T-shape icon */}
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" style={{ flexShrink: 0 }}>
+        {/* Crossbar */}
+        <rect x={0} y={0} width={W} height={barH} rx={Math.round(barH * 0.18)} fill={dark} />
+        {/* Stem */}
+        <rect
+          x={stemX} y={barH - 2}
+          width={stemW} height={H - barH + 2}
+          rx={Math.round(stemW * 0.12)}
+          fill={dark}
+        />
+        {/* Accent square — bottom-left concave corner */}
+        <rect
+          x={1} y={barH}
+          width={accentSize} height={accentSize}
+          rx={Math.round(accentSize * 0.2)}
+          fill={accent}
+        />
+      </svg>
 
-      {/* Kit */}
-      <span
-        style={{
+      {/* Text block */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <span style={{
           fontFamily:    "var(--font-lora), Georgia, serif",
-          fontWeight:    600,
-          fontSize:      s.kit,
+          fontWeight:    700,
+          fontSize:      s.fontSize,
           color:         color ?? "var(--brown-dark)",
           letterSpacing: "-0.01em",
+          lineHeight:    1,
           transition:    trText,
-        }}
-      >
-        Kit
-      </span>
+          userSelect:    "none",
+        }}>
+          T-Kit
+        </span>
+        {subtitle && (
+          <span style={{
+            fontFamily:    "var(--font-lora), Georgia, serif",
+            fontWeight:    400,
+            fontSize:      s.sub,
+            color:         color ?? "var(--brown-light)",
+            letterSpacing: "0.01em",
+            lineHeight:    1.2,
+            transition:    trText,
+            userSelect:    "none",
+          }}>
+            платформа для репетиторов
+          </span>
+        )}
+      </div>
     </div>
   );
 }
