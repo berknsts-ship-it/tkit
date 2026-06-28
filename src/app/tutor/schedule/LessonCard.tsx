@@ -129,28 +129,18 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
         </div>
 
         {/* Оплата */}
-        {!isCancelled && (
-          confirmPay ? (
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="text-xs" style={{ color: "var(--brown-mid)" }}>Снять оплату?</span>
-              <button onClick={confirmUnpay} className="text-xs px-2 py-1 rounded-lg font-semibold text-white"
-                style={{ background: "#e05030" }}>Да</button>
-              <button onClick={() => setConfirmPay(false)} className="text-xs px-2 py-1 rounded-lg border"
-                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}>Нет</button>
-            </div>
-          ) : (
-            <button
-              onClick={handleTogglePay}
-              disabled={payLoading}
-              className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
-              style={{
-                background: payStatus === "paid" ? "#d8f5e0" : "#fff3e0",
-                color:      payStatus === "paid" ? "#1a7a3a" : "#c07800",
-                border:     `1.5px solid ${payStatus === "paid" ? "#b0e8c0" : "#f0d090"}`,
-              }}>
-              {payLoading ? "..." : payStatus === "paid" ? "✓ Оплачено" : "₽ Не оплачено"}
-            </button>
-          )
+        {!isCancelled && !confirmPay && (
+          <button
+            onClick={handleTogglePay}
+            disabled={payLoading}
+            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
+            style={{
+              background: payStatus === "paid" ? "#d8f5e0" : "#fff3e0",
+              color:      payStatus === "paid" ? "#1a7a3a" : "#c07800",
+              border:     `1.5px solid ${payStatus === "paid" ? "#b0e8c0" : "#f0d090"}`,
+            }}>
+            {payLoading ? "..." : payStatus === "paid" ? "✓ Оплачено" : "₽ Не оплачено"}
+          </button>
         )}
 
         {/* Статус + меню */}
@@ -181,6 +171,17 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
           )}
         </div>
       </div>
+
+      {/* Подтверждение снятия оплаты */}
+      {confirmPay && !isCancelled && (
+        <div className="flex items-center gap-2 px-4 pb-3">
+          <span className="text-sm flex-1" style={{ color: "var(--brown-mid)" }}>Снять отметку об оплате?</span>
+          <button onClick={confirmUnpay} className="text-sm px-3 py-1.5 rounded-lg font-semibold text-white"
+            style={{ background: "#e05030" }}>Снять</button>
+          <button onClick={() => setConfirmPay(false)} className="text-sm px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>Отмена</button>
+        </div>
+      )}
 
       {/* Форма переноса */}
       {rescheduleMode && (

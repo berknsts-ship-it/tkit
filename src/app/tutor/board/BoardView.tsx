@@ -203,10 +203,14 @@ export default function BoardView({
             <BoardAI canvasRef={canvasRef} getViewport={getViewport} />
           </div>
 
-          {/* History panel */}
+          {/* History panel — desktop: side panel, mobile: full overlay */}
           {showHistory && (
-            <div className="flex flex-col border-l shrink-0 overflow-hidden"
-              style={{ width: 280, borderColor: "var(--brown-pale)", background: "white" }}>
+            <div className="flex flex-col shrink-0 overflow-hidden"
+              style={{
+                borderLeft: "1px solid var(--brown-pale)",
+                background: "white",
+                width: "min(280px, 100%)",
+              }}>
               <div className="px-4 py-3 border-b flex items-center justify-between shrink-0"
                 style={{ borderColor: "var(--brown-pale)" }}>
                 <span className="font-semibold text-sm" style={{ color: "var(--brown-dark)" }}>Конспекты</span>
