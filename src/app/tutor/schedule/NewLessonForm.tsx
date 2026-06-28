@@ -26,6 +26,8 @@ export default function NewLessonForm({ students }: { students: Student[] }) {
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!studentId || !date || !time) { setError("Заполните все обязательные поля"); return; }
+    const lessonDate = new Date(`${date}T${time}:00`);
+    if (lessonDate < new Date() && !window.confirm("Дата урока в прошлом. Всё равно добавить?")) return;
     setLoading(true);
     setError(null);
     const supabase = createClient();

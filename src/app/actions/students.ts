@@ -41,7 +41,8 @@ export async function createStudent(formData: FormData) {
 export async function deleteStudent(id: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase.from("students").delete().eq("id", id).eq("tutor_id", user.id);
+  if (!user) return { error: "Не авторизован" };
+  const { error } = await supabase.from("students").delete().eq("id", id).eq("tutor_id", user.id);
+  if (error) return { error: error.message };
   revalidatePath("/tutor/students");
 }

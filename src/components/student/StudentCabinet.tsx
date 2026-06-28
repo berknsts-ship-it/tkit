@@ -6,13 +6,15 @@ import type { BoardMaterial } from "@/components/shared/WhiteboardCanvas";
 import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { getSnapshotItems } from "@/app/actions/board";
+import { studentSubmitHomework, studentUnsubmitHomework } from "@/app/actions/homework";
 import PushSubscribeButton from "@/components/student/PushSubscribeButton";
+import { speak } from "@/lib/speak";
 import {
   CalendarDays, ClipboardList, BookOpen, BookMarked, PenLine,
-  ChevronDown, ChevronUp, Dumbbell, RotateCcw, ArrowLeft, ArrowRight,
+  ChevronDown, ChevronUp, Dumbbell, RotateCcw, ArrowLeft, ArrowRight, Volume2,
   BookOpen as BookOpenIcon, Globe, Languages, Feather, Scroll,
   Calculator, Atom, FlaskConical, Microscope, Zap, Binary,
-  Landmark, Map, Compass, GraduationCap, Star,
+  Landmark, Map, Compass, GraduationCap, Star, Check, Undo2, Clock,
 } from "lucide-react";
 import StudentMaterials from "./StudentMaterials";
 import MarkdownContent from "@/components/shared/MarkdownContent";
@@ -51,7 +53,7 @@ type Material = BoardMaterial;
 interface Article   { id: string; title: string; content: string; }
 interface Snapshot  { id: string; title: string; created_at: string; }
 interface VocabWord  { id: string; word: string; translation: string; example?: string | null; }
-interface VocabTopic { id: string; title: string; words: VocabWord[]; }
+interface VocabTopic { id: string; title: string; language: string; words: VocabWord[]; }
 
 interface Props {
   studentId: string;
@@ -90,9 +92,9 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
           style={{ height: 48, borderBottom: "1px solid var(--brown-pale)", background: "white" }}>
           <button
             onClick={() => tab === "notes" ? setViewSnapshot(null) : setTab("lessons")}
-            className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg border hover:opacity-80"
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border hover:opacity-80"
             style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
-            ← Назад
+            <ArrowLeft size={15}/> Назад
           </button>
           {tab === "notes" && viewSnapshot && (
             <span className="text-sm font-medium truncate" style={{ color: "var(--brown-dark)" }}>
@@ -141,10 +143,32 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
         })}
 
         <p className="relative text-sm mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>Привет,</p>
-        <h1 className="relative text-3xl font-bold mb-4 drop-shadow-sm"
+        <h1 className="relative text-3xl font-bold mb-3 drop-shadow-sm"
           style={{ color: "#ffffff", fontFamily: "var(--font-lora), Georgia, serif", textShadow: "0 1px 8px rgba(0,0,0,0.25)" }}>
           {student.name}!
         </h1>
+
+        {/* Следующий урок */}
+        {lessons.length > 0 && (() => {
+          const next = lessons[0];
+          const dt = new Date(next.scheduled_at);
+          const now = new Date();
+          const diffMs = dt.getTime() - now.getTime();
+          const diffH = diffMs / 3600000;
+          const timeStr = dt.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+          const label = diffH < 0 ? null
+            : diffH < 1 ? `через ${Math.round(diffMs/60000)} мин`
+            : diffH < 24 ? `сегодня в ${timeStr}`
+            : diffH < 48 ? `завтра в ${timeStr}`
+            : dt.toLocaleDateString("ru", { day: "numeric", month: "short" }) + ` в ${timeStr}`;
+          return label ? (
+            <div className="relative flex items-center gap-1.5 mb-3 text-sm font-medium"
+              style={{ color: "rgba(255,255,255,0.9)" }}>
+              <Clock size={14} style={{ opacity: 0.8 }}/>
+              Следующий урок: {label}
+            </div>
+          ) : null;
+        })()}
 
         <div className="relative flex gap-2 flex-wrap items-center">
           <Chip icon="📋" label={`${homework.length} ${plural(homework.length, "задание","задания","заданий")}`} />
@@ -154,21 +178,26 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
       </div>
 
       {/* ── Табы ── */}
-      <div className="flex overflow-x-auto border-b" style={{ borderColor: "var(--brown-pale)", background: "white" }}>
-        {TABS.map(({ id, label, Icon }) => {
-          const active = tab === id;
-          return (
-            <button key={id} onClick={() => setTab(id)}
-              className="flex flex-col items-center gap-1 px-4 py-3 text-xs font-medium shrink-0 border-b-2 transition-all"
-              style={{
-                borderBottomColor: active ? "var(--brown-dark)" : "transparent",
-                color: active ? "var(--brown-dark)" : "var(--brown-light)",
-              }}>
-              <Icon size={18} />
-              {label}
-            </button>
-          );
-        })}
+      <div className="relative border-b" style={{ borderColor: "var(--brown-pale)", background: "white" }}>
+        <div className="flex overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
+          {TABS.map(({ id, label, Icon }) => {
+            const active = tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id)}
+                className="flex flex-col items-center gap-1 px-4 py-3 text-xs font-medium shrink-0 border-b-2 transition-all"
+                style={{
+                  borderBottomColor: active ? "var(--brown-dark)" : "transparent",
+                  color: active ? "var(--brown-dark)" : "var(--brown-light)",
+                }}>
+                <Icon size={18} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Градиент-подсказка что можно скроллить вправо */}
+        <div className="absolute right-0 top-0 bottom-0 w-8 pointer-events-none"
+          style={{ background: "linear-gradient(to right, transparent, white)" }} />
       </div>
 
       {/* ── Контент ── */}
@@ -199,27 +228,7 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
 
         {tab === "homework" && (homework.length === 0
           ? <EmptyState icon="📋" title="Заданий нет" sub="Репетитор ещё не задал домашнее задание" />
-          : homework.map(hw => (
-            <div key={hw.id} className="rounded-xl border p-4 bg-white"
-              style={{ borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" }}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="font-medium" style={{ color: "var(--brown-dark)" }}>{hw.title}</div>
-                <span className="shrink-0 text-xs px-2 py-1 rounded-full font-medium"
-                  style={{
-                    background: hw.status === "submitted" ? "#dcfce7" : "var(--brown-pale)",
-                    color: hw.status === "submitted" ? "#16a34a" : "var(--brown-mid)",
-                  }}>
-                  {hw.status === "submitted" ? "Сдано" : "Задано"}
-                </span>
-              </div>
-              {hw.description && <p className="text-sm mt-2" style={{ color: "var(--brown-mid)" }}>{hw.description}</p>}
-              {hw.due_date && (
-                <div className="text-xs mt-2 font-medium" style={{ color: "var(--brown-light)" }}>
-                  Срок: {new Date(hw.due_date).toLocaleDateString("ru", { day: "numeric", month: "long" })}
-                </div>
-              )}
-            </div>
-          ))
+          : homework.map(hw => <HomeworkCard key={hw.id} hw={hw} studentId={studentId} />)
         )}
 
         {tab === "notes" && (snapshots.length === 0
@@ -229,9 +238,11 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
               {snapshots.map(snap => (
                 <button key={snap.id}
                   onClick={async () => {
-                    const items = await getSnapshotItems(snap.id);
-                    setViewSnapshot(snap.id);
-                    setTimeout(() => canvasRef.current?.loadItems(items as Parameters<WhiteboardRef["loadItems"]>[0]), 100);
+                    try {
+                      const items = await getSnapshotItems(snap.id);
+                      setViewSnapshot(snap.id);
+                      setTimeout(() => canvasRef.current?.loadItems(items as Parameters<WhiteboardRef["loadItems"]>[0]), 100);
+                    } catch { /* malformed snapshot — skip */ }
                   }}
                   className="w-full text-left rounded-xl border p-4 bg-white hover:opacity-80 transition-all"
                   style={{ borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" }}>
@@ -263,6 +274,64 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
         )}
 
       </div>
+    </div>
+  );
+}
+
+function HomeworkCard({ hw, studentId }: { hw: { id: string; title: string; description?: string | null; due_date?: string | null; status: string }; studentId: string }) {
+  const [status, setStatus] = useState(hw.status);
+  const [loading, setLoading] = useState(false);
+
+  const overdue = hw.due_date && status !== "submitted" && new Date(hw.due_date) < new Date();
+
+  async function toggleSubmit() {
+    setLoading(true);
+    if (status === "submitted") {
+      await studentUnsubmitHomework(hw.id, studentId);
+      setStatus("pending");
+    } else {
+      await studentSubmitHomework(hw.id, studentId);
+      setStatus("submitted");
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="rounded-xl border p-4 bg-white"
+      style={{
+        borderColor: overdue ? "#fca5a5" : status === "submitted" ? "#86efac" : "var(--brown-pale)",
+        boxShadow: "var(--shadow-card)",
+        background: overdue ? "#fff5f5" : status === "submitted" ? "#f0fdf4" : "white",
+      }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="font-medium" style={{ color: "var(--brown-dark)" }}>{hw.title}</div>
+        <span className="shrink-0 text-xs px-2 py-1 rounded-full font-medium"
+          style={{
+            background: status === "submitted" ? "#dcfce7" : overdue ? "#fee2e2" : "var(--brown-pale)",
+            color: status === "submitted" ? "#16a34a" : overdue ? "#dc2626" : "var(--brown-mid)",
+          }}>
+          {status === "submitted" ? "Сдано" : overdue ? "Просрочено" : "Задано"}
+        </span>
+      </div>
+      {hw.description && <p className="text-sm mt-2" style={{ color: "var(--brown-mid)" }}>{hw.description}</p>}
+      {hw.due_date && (
+        <div className="text-xs mt-2 font-medium flex items-center gap-1"
+          style={{ color: overdue ? "#dc2626" : "var(--brown-light)" }}>
+          {overdue && <Clock size={11} />}
+          Срок: {new Date(hw.due_date).toLocaleDateString("ru", { day: "numeric", month: "long" })}
+        </div>
+      )}
+      <button onClick={toggleSubmit} disabled={loading}
+        className="mt-3 w-full py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-60"
+        style={{
+          background: status === "submitted" ? "#f3f4f6" : "var(--gradient-primary)",
+          color: status === "submitted" ? "var(--brown-mid)" : "white",
+          border: status === "submitted" ? "1px solid var(--brown-pale)" : "none",
+        }}>
+        {loading ? "..." : status === "submitted"
+          ? <><Undo2 size={14} /> Отменить сдачу</>
+          : <><Check size={14} /> Отметить как выполнено</>}
+      </button>
     </div>
   );
 }
@@ -390,39 +459,48 @@ function VocabTrainer({ topics }: { topics: VocabTopic[] }) {
         <span className="text-sm" style={{ color: "var(--brown-light)" }}>{idx + 1} / {words.length}</span>
       </div>
 
-      <button onClick={() => setFlipped(f => !f)}
-        className="w-full rounded-2xl border-2 bg-white hover:opacity-90 active:scale-[0.98] transition-all"
-        style={{
-          borderColor: flipped ? "var(--brown-mid)" : "var(--brown-pale)",
-          boxShadow: "0 4px 20px rgba(59,42,26,0.12)",
-          minHeight: 200,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          padding: "32px 24px", gap: 10,
-        }}>
-        {!flipped ? (
-          <>
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--brown-light)" }}>Слово</div>
-            <div className="text-3xl font-bold text-center"
-              style={{ color: "var(--brown-dark)", fontFamily: "var(--font-lora), Georgia, serif" }}>
-              {word.word}
-            </div>
-            <div className="text-xs mt-1" style={{ color: "var(--brown-light)" }}>нажми чтобы увидеть перевод</div>
-          </>
-        ) : (
-          <>
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--brown-light)" }}>Перевод</div>
-            <div className="text-2xl font-bold text-center"
-              style={{ color: "var(--brown-dark)", fontFamily: "var(--font-lora), Georgia, serif" }}>
-              {word.translation}
-            </div>
-            {word.example && (
-              <div className="text-sm text-center mt-1 italic" style={{ color: "var(--brown-mid)" }}>
-                &ldquo;{word.example}&rdquo;
+      <div className="relative">
+        <button onClick={() => setFlipped(f => !f)}
+          className="w-full rounded-2xl border-2 bg-white hover:opacity-90 active:scale-[0.98] transition-all"
+          style={{
+            borderColor: flipped ? "var(--brown-mid)" : "var(--brown-pale)",
+            boxShadow: "0 4px 20px rgba(59,42,26,0.12)",
+            minHeight: 200,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            padding: "32px 24px", gap: 10,
+          }}>
+          {!flipped ? (
+            <>
+              <div className="text-xs uppercase tracking-wider" style={{ color: "var(--brown-light)" }}>Слово</div>
+              <div className="text-3xl font-bold text-center"
+                style={{ color: "var(--brown-dark)", fontFamily: "var(--font-lora), Georgia, serif" }}>
+                {word.word}
               </div>
-            )}
-          </>
-        )}
-      </button>
+              <div className="text-xs mt-1" style={{ color: "var(--brown-light)" }}>нажми чтобы увидеть перевод</div>
+            </>
+          ) : (
+            <>
+              <div className="text-xs uppercase tracking-wider" style={{ color: "var(--brown-light)" }}>Перевод</div>
+              <div className="text-2xl font-bold text-center"
+                style={{ color: "var(--brown-dark)", fontFamily: "var(--font-lora), Georgia, serif" }}>
+                {word.translation}
+              </div>
+              {word.example && (
+                <div className="text-sm text-center mt-1 italic" style={{ color: "var(--brown-mid)" }}>
+                  &ldquo;{word.example}&rdquo;
+                </div>
+              )}
+            </>
+          )}
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); speak(word.word, topic?.language ?? "en-US"); }}
+          className="absolute bottom-3 right-3 p-2 rounded-full border hover:opacity-80 transition-all"
+          style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "white" }}
+          title="Произнести">
+          <Volume2 size={15} />
+        </button>
+      </div>
 
       <div className="flex items-center justify-between mt-4 gap-3">
         <button onClick={goPrev} disabled={idx === 0}

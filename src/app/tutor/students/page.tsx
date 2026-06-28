@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { UserPlus } from "lucide-react";
-import { deleteStudent } from "@/app/actions/students";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
 import CopyStudentLink from "@/components/tutor/CopyStudentLink";
+import DeleteStudentButton from "@/components/tutor/DeleteStudentButton";
 
 export default async function StudentsPage() {
   const supabase = await createClient();
@@ -107,12 +107,7 @@ export default async function StudentsPage() {
                   >
                     Открыть ↗
                   </Link>
-                  <form action={async () => { "use server"; await deleteStudent(s.id); }}>
-                    <button type="submit" className="text-xs px-2 py-1 rounded-lg border hover:opacity-70 transition-all"
-                      style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}>
-                      Удалить
-                    </button>
-                  </form>
+                  <DeleteStudentButton id={s.id} name={s.name} />
                 </div>
               </div>
             );

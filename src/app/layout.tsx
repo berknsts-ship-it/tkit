@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Lora, Nunito } from "next/font/google";
 import "./globals.css";
 import BackgroundDecor from "@/components/BackgroundDecor";
-import SupportChat from "@/components/SupportChat";
 
 const lora = Lora({
   variable: "--font-lora",
@@ -47,7 +46,6 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <BackgroundDecor />
         <div className="relative flex flex-col flex-1" style={{ zIndex: 1 }}>{children}</div>
-        <SupportChat />
       </body>
     </html>
   );

@@ -43,15 +43,21 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
   const [rescheduleMode, setRescheduleMode] = useState(false);
   const [newDate,        setNewDate]        = useState("");
   const [newTime,        setNewTime]        = useState("");
+  const [confirmPay,     setConfirmPay]     = useState(false);
 
   const cfg   = STATUS_CONFIG[status] ?? STATUS_CONFIG.scheduled;
   const dt    = new Date(lesson.scheduled_at);
   const isPast = status !== "scheduled";
   const isCancelled = status === "cancelled";
 
+  const DESTRUCTIVE: Status[] = ["cancelled", "missed"];
+
   const changeStatus = async (s: Status) => {
     setOpen(false);
     if (s === "rescheduled") { setRescheduleMode(true); return; }
+    if (DESTRUCTIVE.includes(s) && !window.confirm(
+      s === "cancelled" ? "Отменить урок?" : "Отметить как сгоревший?"
+    )) return;
     setLoading(true);
     await updateLessonStatus(lesson.id, s);
     setStatus(s);
@@ -68,9 +74,21 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
   };
 
   const handleTogglePay = async () => {
+    if (payStatus === "paid") {
+      setConfirmPay(true);
+      return;
+    }
     setPayLoading(true);
     await togglePaymentStatus(lesson.id, payStatus);
-    setPayStatus(p => p === "paid" ? "unpaid" : "paid");
+    setPayStatus("paid");
+    setPayLoading(false);
+  };
+
+  const confirmUnpay = async () => {
+    setConfirmPay(false);
+    setPayLoading(true);
+    await togglePaymentStatus(lesson.id, payStatus);
+    setPayStatus("unpaid");
     setPayLoading(false);
   };
 
@@ -112,18 +130,27 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
 
         {/* Оплата */}
         {!isCancelled && (
-          <button
-            onClick={handleTogglePay}
-            disabled={payLoading}
-            title={payStatus === "paid" ? "Оплачено — нажмите чтобы отменить" : "Не оплачено — нажмите чтобы отметить"}
-            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
-            style={{
-              background: payStatus === "paid" ? "#d8f5e0" : "#fff3e0",
-              color:      payStatus === "paid" ? "#1a7a3a" : "#c07800",
-              border:     `1.5px solid ${payStatus === "paid" ? "#b0e8c0" : "#f0d090"}`,
-            }}>
-            {payLoading ? "..." : payStatus === "paid" ? "✓ Оплачено" : "₽ Не оплачено"}
-          </button>
+          confirmPay ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-xs" style={{ color: "var(--brown-mid)" }}>Снять оплату?</span>
+              <button onClick={confirmUnpay} className="text-xs px-2 py-1 rounded-lg font-semibold text-white"
+                style={{ background: "#e05030" }}>Да</button>
+              <button onClick={() => setConfirmPay(false)} className="text-xs px-2 py-1 rounded-lg border"
+                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}>Нет</button>
+            </div>
+          ) : (
+            <button
+              onClick={handleTogglePay}
+              disabled={payLoading}
+              className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
+              style={{
+                background: payStatus === "paid" ? "#d8f5e0" : "#fff3e0",
+                color:      payStatus === "paid" ? "#1a7a3a" : "#c07800",
+                border:     `1.5px solid ${payStatus === "paid" ? "#b0e8c0" : "#f0d090"}`,
+              }}>
+              {payLoading ? "..." : payStatus === "paid" ? "✓ Оплачено" : "₽ Не оплачено"}
+            </button>
+          )
         )}
 
         {/* Статус + меню */}

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { pushToStudent } from "@/lib/push";
@@ -43,4 +44,20 @@ export async function updateHomeworkStatus(id: string, status: string) {
   const supabase = await createClient();
   await supabase.from("homework").update({ status }).eq("id", id);
   revalidatePath("/tutor/homework");
+}
+
+export async function studentSubmitHomework(id: string, studentId: string) {
+  const supabase = createAdminClient();
+  await supabase.from("homework")
+    .update({ status: "submitted" })
+    .eq("id", id)
+    .eq("student_id", studentId);
+}
+
+export async function studentUnsubmitHomework(id: string, studentId: string) {
+  const supabase = createAdminClient();
+  await supabase.from("homework")
+    .update({ status: "pending" })
+    .eq("id", id)
+    .eq("student_id", studentId);
 }

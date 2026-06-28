@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import TKitLogo from "@/components/TKitLogo";
+import { SupportChatButton } from "@/components/SupportChat";
 
 const navLinks = [
   { href: "/tutor/dashboard",  label: "Главная" },
@@ -78,6 +79,7 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser }: { tutorNam
                 PRO
               </Link>
             )}
+            <SupportChatButton />
             <span className="text-sm max-w-[120px] truncate" style={{ color: "var(--brown-mid)" }}>{tutorName}</span>
             <button onClick={handleSignOut}
               className="text-sm px-3 py-1 rounded-lg border transition-all hover:opacity-70"
@@ -121,7 +123,10 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser }: { tutorNam
           </div>
           <div className="border-t px-4 py-4 flex items-center justify-between"
             style={{ borderColor: "var(--brown-pale)" }}>
-            <span className="text-sm" style={{ color: "var(--brown-mid)" }}>{tutorName}</span>
+            <div className="flex items-center gap-3">
+              <SupportChatButton />
+              <span className="text-sm" style={{ color: "var(--brown-mid)" }}>{tutorName}</span>
+            </div>
             <button onClick={handleSignOut}
               className="text-sm px-4 py-2 rounded-lg border"
               style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>

@@ -75,7 +75,7 @@ export default function StudentMaterials({ materials }: { materials: Material[] 
                 <div className="border-t" style={{ borderColor: "var(--brown-pale)" }}>
                   {type === "pdf" && (
                     <iframe
-                      src={m.file_url}
+                      src={m.file_url!}
                       className="w-full"
                       style={{ height: "75vh", display: "block" }}
                       title={m.title}

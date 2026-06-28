@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import StudentCabinet from "@/components/student/StudentCabinet";
 
@@ -16,7 +16,7 @@ export default async function StudentPage({ params }: Props) {
     .eq("access_code", code.toUpperCase())
     .single();
 
-  if (!student) notFound();
+  if (!student) redirect(`/student?error=not_found&code=${encodeURIComponent(code)}`);
 
   const [
     { data: lessons },
@@ -43,7 +43,7 @@ export default async function StudentPage({ params }: Props) {
       .eq("student_id", student.id)
       .order("created_at", { ascending: false }),
     supabase.from("vocabulary_topics")
-      .select("id, title, vocabulary_words(id, word, translation, example)")
+      .select("id, title, language, vocabulary_words(id, word, translation, example)")
       .eq("student_id", student.id)
       .order("created_at", { ascending: false }),
   ]);
@@ -67,7 +67,7 @@ export default async function StudentPage({ params }: Props) {
       articles={articles.map(a => ({ id: a.id, title: a.title, content: a.content }))}
       snapshots={snapshots ?? []}
       topics={(topicsRaw ?? []).map(t => ({
-        id: t.id, title: t.title,
+        id: t.id, title: t.title, language: t.language ?? "en-US",
         words: (t.vocabulary_words ?? []) as { id: string; word: string; translation: string; example?: string | null }[],
       }))}
     />

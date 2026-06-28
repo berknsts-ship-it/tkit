@@ -6,7 +6,7 @@ import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import BoardAI from "@/components/shared/BoardAI";
 import { saveSnapshot, deleteSnapshot, getSnapshotItems, renameSnapshot } from "@/app/actions/board";
-import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil } from "lucide-react";
+import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2 } from "lucide-react";
 
 const EXTERNAL_BOARDS = [
   { label: "Miro",   hint: "Вставь ссылку на существующую доску Miro" },
@@ -43,6 +43,7 @@ export default function BoardView({
     };
   }, []);
 
+  const [fullscreen, setFullscreen] = useState(false);
   const [mode,       setMode]      = useState<"builtin" | "external">("builtin");
   const [iframeUrl,  setIframeUrl] = useState("");
   const [inputUrl,   setInputUrl]  = useState("");
@@ -82,16 +83,20 @@ export default function BoardView({
   };
 
   const handleLoad = async (id: string) => {
-    const items = await getSnapshotItems(id);
-    canvasRef.current?.loadItems(items as Parameters<WhiteboardRef["loadItems"]>[0]);
-    setShowHistory(false);
+    try {
+      const items = await getSnapshotItems(id);
+      canvasRef.current?.loadItems(items as Parameters<WhiteboardRef["loadItems"]>[0]);
+      setShowHistory(false);
+    } catch { /* snapshot data malformed — silently skip */ }
   };
 
   const handleMerge = async () => {
-    for (const id of selected) {
-      const items = await getSnapshotItems(id);
-      canvasRef.current?.mergeItems(items as Parameters<WhiteboardRef["mergeItems"]>[0]);
-    }
+    try {
+      for (const id of selected) {
+        const items = await getSnapshotItems(id);
+        canvasRef.current?.mergeItems(items as Parameters<WhiteboardRef["mergeItems"]>[0]);
+      }
+    } catch { /* partial merge on error */ }
     setSelected(new Set()); setShowHistory(false);
   };
 
@@ -175,11 +180,23 @@ export default function BoardView({
       </div>
 
       {mode === "builtin" && (
-        <div className="flex flex-1 overflow-hidden">
+        <div className={fullscreen
+          ? "fixed inset-0 z-50 flex flex-col"
+          : "flex flex-1 overflow-hidden"
+        }>
           {/* Canvas area */}
           <div className="flex flex-col flex-1 overflow-hidden">
-            <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
               <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="tutor" materials={materials} />
+              {/* Fullscreen toggle */}
+              <button
+                onClick={() => setFullscreen(v => !v)}
+                className="absolute top-2 right-2 z-40 p-1.5 rounded-lg border shadow-sm pointer-events-auto"
+                style={{ background: "white", borderColor: "var(--brown-pale)" }}
+                title={fullscreen ? "Свернуть" : "На весь экран"}
+              >
+                {fullscreen ? <Minimize2 size={14} style={{ color: "var(--brown-dark)" }}/> : <Maximize2 size={14} style={{ color: "var(--brown-dark)" }}/>}
+              </button>
             </div>
             <SyncedAudio roomId={studentId} role="tutor" />
             <SyncedVideo roomId={studentId} role="tutor" />

@@ -6,7 +6,7 @@ import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
   Maximize2, Hand, Navigation, Undo2, Redo2, Pointer, Lock, Unlock, ImagePlus, Link, FileText,
-  Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet,
+  Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile,
 } from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -1007,7 +1007,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [frameFontSize,    setFrameFontSize]    = useState(14);
   const [showFrameMenu,    setShowFrameMenu]    = useState(false);
   const liveFrameRef = useRef<{ wx1: number; wy1: number; wx2: number; wy2: number } | null>(null);
-  const [frameLabelEdit, setFrameLabelEdit] = useState<{ id: string; text: string } | null>(null);
 
 
   // laser / cursor overlays
@@ -1029,6 +1028,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [imgDialog,    setImgDialog]    = useState(false);
   const [imgUrl,       setImgUrl]       = useState("");
   const [imgUploading, setImgUploading] = useState(false);
+  const [imgError,     setImgError]     = useState<string | null>(null);
 
   // shape tool
   const [shapeKind,     setShapeKind]     = useState<ShapeKind>("rect");
@@ -1062,6 +1062,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [emojiSearch, setEmojiSearch] = useState("");
   const [pendingSymbol, setPendingSymbol]   = useState<string | null>(null);
   const [pendingSymbolPos, setPendingSymbolPos] = useState<{ sx: number; sy: number } | null>(null);
+  const [touchDragging, setTouchDragging] = useState(false);
 
   // ── render ──────────────────────────────────────────────────────────────────
   const render = useCallback(() => {
@@ -1702,7 +1703,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     // Finalize multi-drag
     if (multiDragRef.current) {
       const { origItems } = multiDragRef.current;
-      pushHistory({ type:"clear", saved: [...origItems.values()] }); // rough history
+      pushHistory({ type:"clear", saved: [...itemsRef.current].map(i => origItems.get(i.id) ?? i) }); // save pre-drag positions
       for (const id of origItems.keys()) {
         const item = itemsRef.current.find(i => i.id === id);
         if (item) send({ type:"update", item });
@@ -1770,20 +1771,25 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const onTouchStart = (e: React.TouchEvent) => {
     e.preventDefault();
     if (textInput !== null) { textRef.current?.blur(); return; }
-    if (e.touches.length === 2) {
+    if (e.touches.length > 1) {
+      if (selDragRef.current) { selDragRef.current = null; setTouchDragging(false); }
       livePathRef.current = null;
-      const r = containerRef.current!.getBoundingClientRect();
-      const dx = e.touches[1].clientX - e.touches[0].clientX;
-      const dy = e.touches[1].clientY - e.touches[0].clientY;
-      pinchDist.current = Math.sqrt(dx*dx + dy*dy);
-      pinchMid.current  = { x: (e.touches[0].clientX+e.touches[1].clientX)/2-r.left, y: (e.touches[0].clientY+e.touches[1].clientY)/2-r.top };
+      liveShapeRef.current = null;
+      panning.current = false;
+      eraserActiveRef.current = false;
+      if (e.touches.length === 2) {
+        const r = containerRef.current!.getBoundingClientRect();
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        pinchDist.current = Math.sqrt(dx*dx + dy*dy);
+        pinchMid.current  = { x: (e.touches[0].clientX+e.touches[1].clientX)/2-r.left, y: (e.touches[0].clientY+e.touches[1].clientY)/2-r.top };
+      }
       return;
     }
     const { cx, cy } = clientXY(e);
     const w = s2w(cx, cy);
     stopInertia();
     if (tool === "hand" || tool === "select") {
-      // one-finger pan for hand/select when not hitting an element
       const hit = tool === "select"
         ? [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y))
         : null;
@@ -1791,8 +1797,24 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         panning.current = true;
         panOrigin.current = { cx, cy, vx: viewRef.current.panX, vy: viewRef.current.panY };
         lastPanPt.current = { cx, cy, t: Date.now() };
-        return;
+      } else if (hit.locked) {
+        if (role === "tutor") { setSelectedId(hit.id); setSelectedIds(new Set([hit.id])); }
+      } else {
+        setSelectedId(hit.id);
+        setSelectedIds(new Set([hit.id]));
+        selDragRef.current = { mode: "move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit } };
+        setTouchDragging(true);
       }
+      return;
+    }
+    // touch: place pending emoji
+    if (pendingSymbol) {
+      placeSymbol(pendingSymbol, w.x, w.y, pendingSymbol.length === 1 && pendingSymbol.codePointAt(0)! > 127 ? 48 : 32);
+      setPendingSymbol(null); setPendingSymbolPos(null); return;
+    }
+    if (tool === "shape") {
+      const sp = snapPt(w.x, w.y);
+      liveShapeRef.current = { wx1: sp.x, wy1: sp.y, wx2: sp.x, wy2: sp.y }; return;
     }
     if (tool === "text") { setTextInput({ wx: w.x, wy: w.y }); setTextValue(""); setTimeout(() => textRef.current?.focus(), 50); return; }
     if (tool === "laser") return;
@@ -1829,6 +1851,31 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     }
     const w = s2w(cx, cy);
     broadcastCursor(w.x, w.y);
+    if (selDragRef.current) {
+      const drag = selDragRef.current;
+      const idx = itemsRef.current.findIndex(i => i.id === drag.id);
+      if (idx >= 0) {
+        if (drag.mode === "move") {
+          itemsRef.current[idx] = shiftItem(drag.origItem, w.x - drag.wx0, w.y - drag.wy0);
+        } else if (drag.mode === "resize-img" || drag.mode === "resize-frame") {
+          const orig = drag.origItem as ImageItem | FrameItem;
+          const dx = w.x - drag.wx0, dy = w.y - drag.wy0;
+          let { x, y, w: ow, h: oh } = orig;
+          if (drag.corner === "se") { ow = Math.max(20, ow + dx); oh = Math.max(20, oh + dy); }
+          else if (drag.corner === "sw") { x = x + dx; ow = Math.max(20, ow - dx); oh = Math.max(20, oh + dy); }
+          else if (drag.corner === "ne") { y = y + dy; ow = Math.max(20, ow + dx); oh = Math.max(20, oh - dy); }
+          else { x = x + dx; y = y + dy; ow = Math.max(20, ow - dx); oh = Math.max(20, oh - dy); }
+          itemsRef.current[idx] = { ...orig, x, y, w: ow, h: oh };
+        }
+        render();
+      }
+      return;
+    }
+    if (tool === "shape" && liveShapeRef.current) {
+      const sp = snapPt(w.x, w.y);
+      liveShapeRef.current.wx2 = sp.x; liveShapeRef.current.wy2 = sp.y;
+      render(); return;
+    }
     if (tool === "laser") { setOwnLaser(w); if (ownLaserTimer.current) clearTimeout(ownLaserTimer.current); ownLaserTimer.current = setTimeout(() => setOwnLaser(null), 2500); send({ type:"laser", x:w.x, y:w.y }); return; }
     if (tool === "eraser" && eraserActiveRef.current) { eraseAt(w.x, w.y); return; }
     if (!livePathRef.current) return;
@@ -1852,6 +1899,33 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         if (Math.abs(vx) > 0.5 || Math.abs(vy) > 0.5) startInertia(vx, vy);
       }
       lastPanPt.current = null;
+    }
+    if (e.touches.length === 0 && selDragRef.current) {
+      const drag = selDragRef.current;
+      selDragRef.current = null;
+      setTouchDragging(false);
+      const idx = itemsRef.current.findIndex(i => i.id === drag.id);
+      if (idx >= 0) {
+        const next = itemsRef.current[idx];
+        if (JSON.stringify(drag.origItem) !== JSON.stringify(next)) {
+          pushHistory({ type:"update", idx, prev: drag.origItem, next: { ...next } });
+          send({ type:"update", item: next });
+        }
+      }
+    }
+    if (e.touches.length === 0 && liveShapeRef.current) {
+      const ls = liveShapeRef.current; liveShapeRef.current = null;
+      const fw = Math.abs(ls.wx2 - ls.wx1), fh = Math.abs(ls.wy2 - ls.wy1);
+      if (fw > 4 || fh > 4) {
+        const item: DrawItem = {
+          type:"shape", id:uid(), shape:shapeKind,
+          x1:Math.min(ls.wx1,ls.wx2), y1:Math.min(ls.wy1,ls.wy2),
+          x2:Math.max(ls.wx1,ls.wx2), y2:Math.max(ls.wy1,ls.wy2),
+          color, size, fill: shapeFill ? color+"33" : undefined,
+          ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
+        };
+        itemsRef.current.push(item); render(); send({ type:"path", item }); pushHistory({ type:"add", item });
+      }
     }
     if (e.touches.length === 0 && livePathRef.current) {
       const item = livePathRef.current; livePathRef.current = null;
@@ -1893,28 +1967,36 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   // ── add image ─────────────────────────────────────────────────────────────────
   const addImageToBoard = (url: string) => {
     if (!url.trim()) return;
-    const { zoom, panX, panY } = viewRef.current;
-    const canvas = canvasRef.current;
-    const cx = canvas ? (canvas.width / 2 - panX) / zoom : 200;
-    const cy = canvas ? (canvas.height / 2 - panY) / zoom : 200;
+    setImgError(null);
     const DEFAULT_W = 400;
-    const item: ImageItem = {
-      type: "image", id: uid(),
-      x: cx - DEFAULT_W / 2, y: cy - 150,
-      w: DEFAULT_W, h: 300,
-      url,
-      ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
+    const placeItem = (w: number, h: number) => {
+      const { zoom, panX, panY } = viewRef.current;
+      const container = containerRef.current;
+      const cx = container ? (container.clientWidth / 2 - panX) / zoom : 200;
+      const cy = container ? (container.clientHeight / 2 - panY) / zoom : 200;
+      const item: ImageItem = {
+        type: "image", id: uid(),
+        x: cx - w / 2, y: cy - h / 2,
+        w, h, url,
+        ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
+      };
+      itemsRef.current.push(item); render();
+      send({ type: "path", item }); pushHistory({ type: "add", item });
+      setImgDialog(false); setImgUrl("");
     };
-    // Try to get natural size from cache
+    // Try cache first (instant)
     const cached = getCachedImage(url, () => {});
     if (cached) {
       const ratio = cached.naturalHeight / cached.naturalWidth;
-      item.h = Math.round(DEFAULT_W * ratio);
-      item.y = cy - item.h / 2;
+      placeItem(DEFAULT_W, Math.round(DEFAULT_W * ratio));
+      return;
     }
-    itemsRef.current.push(item); render();
-    send({ type: "path", item }); pushHistory({ type: "add", item });
-    setImgDialog(false); setImgUrl("");
+    // Pre-load to validate URL and get dimensions
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => placeItem(DEFAULT_W, Math.max(50, Math.round(DEFAULT_W * img.naturalHeight / img.naturalWidth)));
+    img.onerror = () => setImgError("Не удалось загрузить изображение. Проверьте ссылку.");
+    img.src = url;
   };
 
   const [fullscreenVideo, setFullscreenVideo] = useState<string | null>(null);
@@ -2451,7 +2533,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   // ── JSX ───────────────────────────────────────────────────────────────────────
   // closes all sidebar popups (shape/frame/emoji panels)
   const closeSidePanels = () => { setShowShapeMenu(false); setShowFrameMenu(false); setShowEmojiPicker(false); };
-  const pickTool = (t: Tool) => { setTool(t); closeSidePanels(); };
+  const pickTool = (t: Tool) => {
+    liveShapeRef.current = null;
+    livePathRef.current = null;
+    eraserActiveRef.current = false;
+    render();
+    setTool(t); closeSidePanels();
+  };
 
   // keyboard shortcuts
   useEffect(() => {
@@ -2996,7 +3084,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         }}>
 
         <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }}
-          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} />
+          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+          onTouchCancel={() => {
+            selDragRef.current = null; setTouchDragging(false);
+            livePathRef.current = null; liveShapeRef.current = null;
+            panning.current = false; eraserActiveRef.current = false;
+          }} />
 
         {/* Video overlays */}
         {itemsRef.current.filter(it => it.type === "video").map(it => {
@@ -3006,9 +3099,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           const sw = ep.x - sp.x, sh = ep.y - sp.y;
           const selected = selectedId === vi.id || selectedIds.has(vi.id);
           const locked = vi.locked;
+          const isDraggingThis = touchDragging && selectedId === vi.id;
           return (
             <div key={vi.id} className="absolute"
-              style={{ left: sp.x, top: sp.y, width: sw, height: sh, zIndex: 20 }}
+              style={{ left: sp.x, top: sp.y, width: sw, height: sh, zIndex: 20,
+                visibility: isDraggingThis ? "hidden" : undefined }}
               onMouseDown={e => {
                 e.stopPropagation();
                 setSelectedId(vi.id); setSelectedIds(new Set());
@@ -3027,23 +3122,24 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 <Maximize2 size={12}/>
               </button>
               {/* Resize handles */}
-              {selected && !locked && (["nw","ne","sw","se"] as const).map(corner => {
+              {selected && !locked && !touchDragging && (["nw","ne","sw","se"] as const).map(corner => {
                 const isRight = corner.endsWith("e"), isBottom = corner.startsWith("s");
+                const startResize = (clientX: number, clientY: number) => {
+                  const rect = containerRef.current!.getBoundingClientRect();
+                  const ww = (clientX - rect.left - viewRef.current.panX) / viewRef.current.zoom;
+                  const wh = (clientY - rect.top  - viewRef.current.panY) / viewRef.current.zoom;
+                  selDragRef.current = { mode:"resize-img", id: vi.id, corner, wx0: ww, wy0: wh, origItem: { ...vi } };
+                };
                 return (
                   <div key={corner} className="absolute pointer-events-auto"
                     style={{
                       [isRight?"right":"left"]: -7, [isBottom?"bottom":"top"]: -7,
-                      width:14, height:14, cursor:`${corner}-resize`, zIndex:32,
+                      width:18, height:18, cursor:`${corner}-resize`, zIndex:32,
                       background:"white", border:"2px solid #4a80f0", borderRadius:3,
                     }}
-                    onMouseDown={e => {
-                      e.stopPropagation();
-                      const rect = containerRef.current!.getBoundingClientRect();
-                      const ww = (e.clientX - rect.left - viewRef.current.panX) / viewRef.current.zoom;
-                      const wh = (e.clientY - rect.top  - viewRef.current.panY) / viewRef.current.zoom;
-                      selDragRef.current = { mode:"resize-img", id: vi.id, corner,
-                        wx0: ww, wy0: wh, origItem: { ...vi } };
-                    }}/>
+                    onMouseDown={e => { e.stopPropagation(); startResize(e.clientX, e.clientY); }}
+                    onTouchStart={e => { e.stopPropagation(); e.preventDefault(); startResize(e.touches[0].clientX, e.touches[0].clientY); }}
+                  />
                 );
               })}
             </div>
@@ -3060,7 +3156,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           return (
             <div key={fi.id} className="absolute pointer-events-none"
               style={{ left: sp.x, top: sp.y, width: sw, height: sh, zIndex: 18 }}>
-              {selected && (
+              {selected && !touchDragging && (
                 <>
                   <div className="absolute inset-0" style={{ outline: "2px solid #4a80f0" }} />
                   {!fi.locked && (["nw","ne","sw","se"] as const).map(corner => {
@@ -3095,6 +3191,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           const ep = w2s(di.x + di.w, di.y + di.h);
           const sw = ep.x - sp.x, sh = ep.y - sp.y;
           const sel = selectedId === di.id || selectedIds.has(di.id);
+          if (touchDragging && selectedId === di.id) return null;
           return (
             <DiceOverlay key={di.id} item={di} sp={sp} sw={sw} sh={sh} selected={sel}
               onRoll={result => updateBoardItem({ ...di, result })} />
@@ -3108,6 +3205,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           const ep = w2s(wi.x + wi.w, wi.y + wi.h);
           const sw = ep.x - sp.x, sh = ep.y - sp.y;
           const sel = selectedId === wi.id || selectedIds.has(wi.id);
+          if (touchDragging && selectedId === wi.id) return null;
           return (
             <WheelOverlay key={wi.id} item={wi} sp={sp} sw={sw} sh={sh} selected={sel}
               onAngleUpdate={angle => updateBoardItem({ ...wi, angle })}
@@ -3172,9 +3270,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           </div>
         )}
         {pendingSymbol && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-xl text-xs font-medium shadow-lg pointer-events-none select-none"
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium shadow-lg pointer-events-auto select-none"
             style={{ background:"var(--brown-dark)", color:"white", zIndex:51 }}>
-            Кликните на доску чтобы разместить · Esc — отмена
+            <span className="pointer-events-none">Тапни на доску чтобы разместить</span>
+            <button onClick={() => { setPendingSymbol(null); setPendingSymbolPos(null); }}
+              className="ml-1 text-white opacity-70 hover:opacity-100 font-bold text-sm leading-none">✕</button>
           </div>
         )}
 
@@ -3209,51 +3309,56 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             <div className="absolute" style={{ left:tl.x, top:tl.y, width:sw, height:sh,
               border:"2px solid #4a80f0", background:"rgba(74,128,240,0.04)",
               borderRadius:4, zIndex:30 }}>
-              {/* Badge */}
-              <div className="absolute pointer-events-none flex items-center gap-2"
-                style={{ top:-28, left:0 }}>
-                <div className="rounded-lg px-2 py-0.5 text-xs font-medium text-white flex items-center gap-1"
-                  style={{ background:"#4a80f0" }}>
-                  {items.length} объекта
-                </div>
-              </div>
-              {/* Toolbar: duplicate + delete */}
-              <div className="absolute pointer-events-auto flex items-center gap-1"
-                style={{ top:-28, right:0 }}>
-                <button onMouseDown={e => e.stopPropagation()}
-                  onClick={() => {
-                    const sel = itemsRef.current.filter(i => selectedIds.has(i.id));
-                    const duped = sel.map(i => shiftItem({ ...i, id: uid() }, 24, 24));
-                    duped.forEach(item => { itemsRef.current.push(item); send({ type:"path", item }); pushHistory({ type:"add", item }); });
-                    render();
-                  }}
-                  className="rounded-lg px-2 py-0.5 text-xs font-medium flex items-center gap-1 hover:opacity-80 border"
-                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
-                  ⧉ Дубль
-                </button>
-                <button onMouseDown={e => e.stopPropagation()}
-                  onClick={() => {
-                    pushHistory({ type:"clear", saved:[...itemsRef.current] });
-                    const toRemove = new Set(selectedIds);
-                    itemsRef.current = itemsRef.current.filter(i => !toRemove.has(i.id));
-                    render(); send({ type:"clear" });
-                    itemsRef.current.forEach(item => send({ type:"path", item }));
-                    setSelectedIds(new Set()); setSelectedId(null);
-                  }}
-                  className="rounded-lg px-2 py-0.5 text-xs font-medium text-white flex items-center gap-1 hover:opacity-80"
-                  style={{ background:"#e05030" }}>
-                  <Trash2 size={11}/> Удалить
-                </button>
-              </div>
+              {/* Badge + toolbar — flip below group if near top of canvas */}
+              {(() => {
+                const vOff = tl.y > 32 ? -28 : sh + 4;
+                return (
+                  <>
+                    <div className="absolute pointer-events-none flex items-center gap-2"
+                      style={{ top: vOff, left: 0 }}>
+                      <div className="rounded-lg px-2 py-0.5 text-xs font-medium text-white flex items-center gap-1"
+                        style={{ background:"#4a80f0" }}>
+                        {items.length} объекта
+                      </div>
+                    </div>
+                    <div className="absolute pointer-events-auto flex items-center gap-1"
+                      style={{ top: vOff, right: 0 }}>
+                      <button onMouseDown={e => e.stopPropagation()}
+                        onClick={() => {
+                          const sel = itemsRef.current.filter(i => selectedIds.has(i.id));
+                          const duped = sel.map(i => shiftItem({ ...i, id: uid() }, 24, 24));
+                          duped.forEach(item => { itemsRef.current.push(item); send({ type:"path", item }); pushHistory({ type:"add", item }); });
+                          render();
+                        }}
+                        className="rounded-lg px-2 py-0.5 text-xs font-medium flex items-center gap-1 hover:opacity-80 border"
+                        style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                        ⧉ Дубль
+                      </button>
+                      <button onMouseDown={e => e.stopPropagation()}
+                        onClick={() => {
+                          pushHistory({ type:"clear", saved:[...itemsRef.current] });
+                          const toRemove = new Set(selectedIds);
+                          itemsRef.current = itemsRef.current.filter(i => !toRemove.has(i.id));
+                          render(); send({ type:"clear" });
+                          itemsRef.current.forEach(item => send({ type:"path", item }));
+                          setSelectedIds(new Set()); setSelectedId(null);
+                        }}
+                        className="rounded-lg px-2 py-0.5 text-xs font-medium text-white flex items-center gap-1 hover:opacity-80"
+                        style={{ background:"#e05030" }}>
+                        <Trash2 size={11}/> Удалить
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
               {/* Drag hint */}
-              <div className="absolute inset-0 cursor-move"
-                style={{ zIndex:1 }}/>
+              <div className="absolute inset-0 cursor-move" style={{ zIndex:1 }}/>
             </div>
           );
         })()}
 
-        {/* Selection overlay */}
-        {selectedItem && tool === "select" && (() => {
+        {/* Selection overlay — hidden while touch-dragging to avoid stale DOM position */}
+        {selectedItem && tool === "select" && !touchDragging && (() => {
           const bounds = itemBounds(selectedItem);
           const PAD = 8 / zoom;
           const tl = w2s(bounds.x0 - PAD, bounds.y0 - PAD);
@@ -3268,11 +3373,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {/* Lock button — tutor only */}
               {role === "tutor" && (
                 <button className="absolute pointer-events-auto flex items-center justify-center rounded"
-                  style={{ left:-10, top:-10, width:22, height:22, zIndex:31, cursor:"pointer",
+                  style={{ left:-12, top:-12, width:28, height:28, zIndex:31, cursor:"pointer",
                     background: locked?"#e09020":"#4a80f0", border:"none" }}
                   onMouseDown={e => e.stopPropagation()}
+                  onTouchStart={e => e.stopPropagation()}
                   onClick={() => toggleLock(selectedItem.id)}>
-                  {locked ? <Unlock size={11} color="white"/> : <Lock size={11} color="white"/>}
+                  {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
               )}
               {/* Duplicate + Crop buttons (top-right area) */}
@@ -3709,12 +3815,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 <div>
                   <div className="text-xs mb-1.5 font-medium" style={{ color:"var(--brown-mid)" }}>URL изображения</div>
                   <div className="flex gap-2">
-                    <input value={imgUrl} onChange={e => setImgUrl(e.target.value)}
+                    <input value={imgUrl} onChange={e => { setImgUrl(e.target.value); setImgError(null); }}
                       onKeyDown={e => e.key==="Enter" && addImageToBoard(imgUrl)}
                       placeholder="https://..."
                       autoFocus
                       className="flex-1 px-3 py-2 rounded-xl border outline-none text-sm"
-                      style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}/>
+                      style={{ borderColor: imgError ? "#e05050" : "var(--brown-pale)", color:"var(--brown-dark)" }}/>
                     <button onClick={() => addImageToBoard(imgUrl)}
                       disabled={!imgUrl.trim()}
                       className="px-4 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-40"
@@ -3722,6 +3828,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                       <Link size={14}/>
                     </button>
                   </div>
+                  {imgError && <div className="text-xs mt-1" style={{ color:"#e05050" }}>{imgError}</div>}
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-px" style={{ background:"var(--brown-pale)" }}/>
@@ -3830,61 +3937,132 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       </div>
 
       {/* Mobile toolbar */}
-      <div className="flex sm:hidden flex-col border-t shrink-0" style={{ borderColor:"var(--brown-pale)", background:"white" }}>
+      <div className="flex sm:hidden flex-col border-t shrink-0" style={{ borderColor:"var(--brown-pale)", background:"white" }}
+        onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+        {/* Row 1: tools + controls */}
         <div className="flex items-center gap-1 px-2 py-1.5 border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)" }}>
           {([
-            { t:"select" as Tool, icon:<Pointer size={17}/> },
-            { t:"pen" as Tool,       icon:<Pencil size={17}/> },
-            { t:"highlight" as Tool, icon:<Highlighter size={17}/> },
-            { t:"eraser" as Tool,    icon:<Eraser size={17}/> },
-            { t:"text" as Tool,      icon:<Type size={17}/> },
-            { t:"laser" as Tool,     icon:<MousePointer2 size={17}/> },
-            { t:"hand" as Tool,      icon:<Hand size={17}/> },
+            { t:"select" as Tool, icon:<Pointer size={19}/> },
+            { t:"pen" as Tool,       icon:<Pencil size={19}/> },
+            { t:"highlight" as Tool, icon:<Highlighter size={19}/> },
+            { t:"eraser" as Tool,    icon:<Eraser size={19}/> },
+            { t:"text" as Tool,      icon:<Type size={19}/> },
+            { t:"laser" as Tool,     icon:<MousePointer2 size={19}/> },
+            { t:"hand" as Tool,      icon:<Hand size={19}/> },
           ] as const).map(({ t, icon }) => (
-            <ToolBtn key={t} active={tool===t} onClick={() => setTool(t)} title="">{icon}</ToolBtn>
+            <ToolBtn key={t} active={tool===t}
+              onClick={() => { commitText(); pickTool(t); }}
+              title="">{icon}</ToolBtn>
           ))}
-          <div className="flex-1"/>
+          {/* Shapes */}
+          <ToolBtn active={tool==="shape"} onClick={() => { commitText(); setTool("shape"); setShowShapeMenu(false); }} title="">
+            <Shapes size={19}/>
+          </ToolBtn>
+          {/* Image */}
+          <ToolBtn active={false} onClick={() => { commitText(); pickTool("image"); setImgDialog(true); }} title="">
+            <ImagePlus size={19}/>
+          </ToolBtn>
+          {/* Emoji */}
+          <ToolBtn active={showEmojiPicker} onClick={() => { commitText(); setShowEmojiPicker(v => !v); }} title="">
+            <Smile size={19}/>
+          </ToolBtn>
+          <div className="flex-1 shrink-0 min-w-2"/>
           {role==="tutor" && (
-            <button onClick={bringToMe} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border-2 font-medium"
+            <button onClick={bringToMe} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border-2 font-medium shrink-0"
               style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}>
               <Navigation size={12}/> Ко мне
             </button>
           )}
-          <button onClick={undo} disabled={!canUndo} className="p-2 rounded-lg border disabled:opacity-25" style={{ borderColor:"var(--brown-pale)" }}><Undo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
-          <button onClick={redo} disabled={!canRedo} className="p-2 rounded-lg border disabled:opacity-25" style={{ borderColor:"var(--brown-pale)" }}><Redo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
-          <button onClick={() => zoomCenter(1/1.3)} className="p-2 rounded-lg border" style={{ borderColor:"var(--brown-pale)" }}><ZoomOut size={16} style={{ color:"var(--brown-dark)" }}/></button>
-          <span className="text-xs w-9 text-center" style={{ color:"var(--brown-mid)" }}>{vpZoom}%</span>
-          <button onClick={() => zoomCenter(1.3)} className="p-2 rounded-lg border" style={{ borderColor:"var(--brown-pale)" }}><ZoomIn size={16} style={{ color:"var(--brown-dark)" }}/></button>
-          <button onClick={() => applyView(1,0,0)} className="p-2 rounded-lg border" style={{ borderColor:"var(--brown-pale)" }}><Maximize2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
+          <button onClick={undo} disabled={!canUndo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Undo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
+          <button onClick={redo} disabled={!canRedo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Redo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
+          <button onClick={() => zoomCenter(1/1.3)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><ZoomOut size={16} style={{ color:"var(--brown-dark)" }}/></button>
+          <span className="text-xs w-9 text-center shrink-0" style={{ color:"var(--brown-mid)" }}>{vpZoom}%</span>
+          <button onClick={() => zoomCenter(1.3)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><ZoomIn size={16} style={{ color:"var(--brown-dark)" }}/></button>
+          <button onClick={() => applyView(1,0,0)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Maximize2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
         </div>
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          {tool==="highlight"
-            ? <div className="flex gap-2 overflow-x-auto">{HIGHLIGHT_COLORS.map(c=><button key={c} onClick={()=>setHlColor(c)} className="shrink-0 rounded-full border-2" style={{ width:28,height:28,background:c,borderColor:hlColor===c?"var(--brown-dark)":"transparent" }}/>)}</div>
-            : (tool==="pen"||tool==="eraser")
-            ? <div className="flex gap-2 overflow-x-auto">{COLORS.map(c=><button key={c} onClick={()=>setColor(c)} className="shrink-0 rounded-full border-2" style={{ width:28,height:28,background:c,borderColor:color===c?"var(--brown-dark)":"transparent",boxShadow:c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>)}</div>
-            : null
-          }
-          <div className="flex gap-0.5 ml-auto items-center">
+        {/* Row 2: context — sizes + colors / shapes / ruling */}
+        <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto">
+          {/* Brush sizes for pen/highlight/eraser/shape */}
+          {(tool==="pen"||tool==="eraser"||tool==="highlight"||tool==="shape") && (
+            <div className="flex gap-1 shrink-0">
+              {SIZES.map(s => (
+                <button key={s} onClick={() => setSize(s)}
+                  className="flex items-center justify-center rounded-full border-2 shrink-0 transition-all"
+                  style={{ width:30, height:30, borderColor:size===s?"var(--brown-dark)":"var(--brown-pale)", opacity:size===s?1:0.4 }}>
+                  <div className="rounded-full" style={{ width:Math.min(s+2,22), height:Math.min(s+2,22), background:"var(--brown-dark)" }}/>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Shape kind picker */}
+          {tool==="shape" && (
+            <div className="flex gap-1 shrink-0">
+              <div className="w-px mx-0.5 self-stretch" style={{ background:"var(--brown-pale)" }}/>
+              {SHAPE_KINDS.map(k => (
+                <button key={k.v} onClick={() => setShapeKind(k.v)}
+                  className="w-8 h-8 rounded-lg border-2 text-base flex items-center justify-center shrink-0 transition-all"
+                  style={{ borderColor:shapeKind===k.v?"var(--brown-dark)":"transparent", opacity:shapeKind===k.v?1:0.45 }}
+                  title={k.label}>
+                  {k.icon}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Color swatches + custom picker */}
+          {(tool==="pen"||tool==="eraser"||tool==="shape") && (
+            <div className="flex gap-1.5 items-center shrink-0">
+              <div className="w-px mx-0.5 self-stretch" style={{ background:"var(--brown-pale)" }}/>
+              {COLORS.map(c => (
+                <button key={c} onClick={() => setColor(c)}
+                  className="rounded-full border-2 shrink-0"
+                  style={{ width:28,height:28,background:c,borderColor:color===c?"var(--brown-dark)":"transparent",boxShadow:c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>
+              ))}
+              <label className="relative rounded-full border-2 shrink-0 overflow-hidden cursor-pointer"
+                style={{ width:28,height:28,borderColor:!COLORS.includes(color)?"var(--brown-dark)":"var(--brown-pale)",background:color }}
+                title="Свой цвет">
+                <input type="color" value={color} onChange={e => setColor(e.target.value)}
+                  className="absolute opacity-0 w-full h-full cursor-pointer" style={{ top:0,left:0 }}/>
+              </label>
+            </div>
+          )}
+          {tool==="highlight" && (
+            <div className="flex gap-1.5 items-center shrink-0">
+              <div className="w-px mx-0.5 self-stretch" style={{ background:"var(--brown-pale)" }}/>
+              {HIGHLIGHT_COLORS.map(c => (
+                <button key={c} onClick={() => setHlColor(c)}
+                  className="rounded-full border-2 shrink-0"
+                  style={{ width:28,height:28,background:c,borderColor:hlColor===c?"var(--brown-dark)":"transparent" }}/>
+              ))}
+              <label className="relative rounded-full border-2 shrink-0 overflow-hidden cursor-pointer"
+                style={{ width:28,height:28,borderColor:!HIGHLIGHT_COLORS.includes(hlColor)?"var(--brown-dark)":"var(--brown-pale)",background:hlColor }}
+                title="Свой цвет">
+                <input type="color" value={hlColor} onChange={e => setHlColor(e.target.value)}
+                  className="absolute opacity-0 w-full h-full cursor-pointer" style={{ top:0,left:0 }}/>
+              </label>
+            </div>
+          )}
+          {/* Ruling + clear (always at end) */}
+          <div className="flex gap-0.5 ml-auto items-center shrink-0">
             {RULING_OPTIONS.map(({ v, title }) => (
               <button key={v} onClick={() => setRuling(v)} title={title}
                 className="flex items-center justify-center rounded-lg border-2"
-                style={{ width:32, height:32, borderColor:ruling===v?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:ruling===v?1:0.4 }}>
+                style={{ width:30, height:30, borderColor:ruling===v?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:ruling===v?1:0.4 }}>
                 <RulingIcon v={v}/>
               </button>
             ))}
-            {(ruling === "lines" || ruling === "grid" || ruling === "calligraphy") && (
+            {(ruling==="lines"||ruling==="grid"||ruling==="calligraphy") && (
               <div className="flex gap-0.5 ml-1">
                 {(["S","M","L"] as RulingSize[]).map(sz => (
                   <button key={sz} onClick={() => setSzRuling(sz)}
                     className="text-xs font-bold rounded border-2"
-                    style={{ width:24, height:24, borderColor: rulingSize===sz?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity: rulingSize===sz?1:0.4 }}>
+                    style={{ width:24, height:24, borderColor:rulingSize===sz?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:rulingSize===sz?1:0.4 }}>
                     {sz}
                   </button>
                 ))}
               </div>
             )}
           </div>
-          <button onClick={handleClear} className="p-2 rounded-lg border" style={{ borderColor:"#f0c0b0", color:"#c06040" }}><Trash2 size={17}/></button>
+          <button onClick={handleClear} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"#f0c0b0", color:"#c06040" }}><Trash2 size={17}/></button>
         </div>
       </div>
       </div>
