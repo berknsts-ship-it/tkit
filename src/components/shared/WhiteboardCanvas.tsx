@@ -29,7 +29,7 @@ type TextItem = {
   x: number; y: number; text: string; font: string; color: string;
   fontSize: number; bold: boolean; italic: boolean; align: TextAlign;
   bgColor?: string; bgOpacity?: number; opacity?: number;
-  locked?: boolean; pdfPage?: number;
+  locked?: boolean; pdfPage?: number; isSymbol?: boolean;
 };
 type FrameItem = {
   type: "frame"; id: string;
@@ -2118,6 +2118,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       type: "text", id: uid(), x: wx, y: wy,
       text: sym, font: "Arial, sans-serif",
       color, fontSize: fs, bold: false, italic: false, align: "center",
+      isSymbol: true,
       ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
     };
     itemsRef.current.push(item); render();
@@ -3086,15 +3087,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           if (hit) return; // let item handle its own dblclick
           setTextInput({ wx: w.x, wy: w.y }); setTextValue("");
           setTimeout(() => textRef.current?.focus(), 30);
+        }}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => {
+          selDragRef.current = null; setTouchDragging(false);
+          livePathRef.current = null; liveShapeRef.current = null;
+          panning.current = false; eraserActiveRef.current = false;
         }}>
 
         <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }}
-          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-          onTouchCancel={() => {
-            selDragRef.current = null; setTouchDragging(false);
-            livePathRef.current = null; liveShapeRef.current = null;
-            panning.current = false; eraserActiveRef.current = false;
-          }} />
+          onTouchStart={onTouchStart} />
 
         {/* Video overlays */}
         {itemsRef.current.filter(it => it.type === "video").map(it => {
@@ -3399,8 +3402,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>✂ Обрезать</button>
                 )}
               </div>
-              {/* Edit button — text double-click */}
-              {selectedItem.type === "text" && (
+              {/* Edit button — text double-click (not for symbols/emojis) */}
+              {selectedItem.type === "text" && !selectedItem.isSymbol && !(selectedItem.align === "center" && [...selectedItem.text].every(c => c.codePointAt(0)! > 127)) && (
                 <button className="absolute pointer-events-auto flex items-center justify-center rounded"
                   style={{ right:-10, top:-10, width:22, height:22, zIndex:31, cursor:"pointer",
                     background:"#4a80f0", border:"none" }}
