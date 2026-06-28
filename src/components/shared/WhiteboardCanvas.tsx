@@ -3423,7 +3423,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             <div className="absolute pointer-events-none"
               style={{ left:tl.x, top:tl.y, width:sw, height:sh,
                 border: locked ? "2px dashed #e09020" : "2px dashed #4a80f0",
-                borderRadius:4, zIndex:30 }}>
+                borderRadius:4, zIndex:30, touchAction:"none" }}>
               {/* Lock button — tutor only */}
               {role === "tutor" && (
                 <button className="absolute pointer-events-auto flex items-center justify-center rounded"
@@ -3474,10 +3474,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {/* Resize handle — text only */}
               {selectedItem.type === "text" && !locked && (
                 <div className="absolute pointer-events-auto"
-                  style={{ right:-9, bottom:-9, width:20, height:20, cursor:"se-resize",
+                  style={{ right:-9, bottom:-9, width:24, height:24, cursor:"se-resize",
                     background:"white", border:"2px solid #4a80f0", borderRadius:4,
                     display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:9, color:"#4a80f0", userSelect:"none" }}
+                    fontSize:10, color:"#4a80f0", userSelect:"none",
+                    touchAction:"none" }}
                   onMouseDown={e => {
                     e.stopPropagation();
                     const ti = selectedItem as TextItem;
@@ -3590,8 +3591,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           const toolbarLeft = Math.max(4, Math.min(textScr.x - TOOLBAR_W / 2, containerW - TOOLBAR_W - 4));
           return (
             <>
-              {/* ── Floating toolbar above text (Miro-style) ── */}
-              <div className="absolute pointer-events-auto flex items-center gap-0.5 px-2 py-1 rounded-2xl shadow-2xl border"
+              {/* ── Floating toolbar above text (desktop only, too wide for mobile) ── */}
+              <div className="absolute pointer-events-auto hidden sm:flex items-center gap-0.5 px-2 py-1 rounded-2xl shadow-2xl border"
                 style={{ top: toolbarTop, left: toolbarLeft, width: TOOLBAR_W,
                   background:"white", borderColor:"var(--brown-pale)", zIndex:60 }}
                 onMouseDown={e => e.preventDefault()}>
@@ -4057,10 +4058,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           <ToolBtn active={false} onClick={() => { commitText(); pickTool("image"); setImgDialog(true); }} title="">
             <ImagePlus size={19}/>
           </ToolBtn>
-          {/* Emoji */}
-          <ToolBtn active={showEmojiPicker} onClick={() => { commitText(); setShowEmojiPicker(v => !v); }} title="">
-            <Smile size={19}/>
-          </ToolBtn>
           {/* AI Layout */}
           {role === "tutor" && (
             <ToolBtn active={false} onClick={() => aiInputRef.current?.click()} title="">
@@ -4080,6 +4077,35 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         </div>
         {/* Row 2: context — sizes + colors / shapes / ruling */}
         <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto" style={{ touchAction:"pan-x" }}>
+          {/* Text controls — mobile only, shown while text input is active */}
+          {(tool==="text" || textInput) && textInput && (
+            <div className="flex items-center gap-1 w-full shrink-0">
+              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.max(8,s-2))}
+                className="w-9 h-9 rounded-lg border-2 text-sm font-bold shrink-0 flex items-center justify-center"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>A−</button>
+              <span className="text-sm w-8 text-center shrink-0 tabular-nums" style={{ color:"var(--brown-dark)" }}>{fontSize}</span>
+              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.min(200,s+2))}
+                className="w-9 h-9 rounded-lg border-2 text-sm font-bold shrink-0 flex items-center justify-center"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>A+</button>
+              <div className="w-px self-stretch mx-0.5" style={{ background:"var(--brown-pale)" }}/>
+              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setBold(b=>!b)}
+                className="w-9 h-9 rounded-lg border-2 text-base font-bold shrink-0 flex items-center justify-center"
+                style={{ borderColor:bold?"#4a80f0":"var(--brown-pale)", background:bold?"#eef2ff":"white", color:"var(--brown-dark)" }}>B</button>
+              <button onPointerDown={e=>e.preventDefault()} onClick={()=>setItalic(i=>!i)}
+                className="w-9 h-9 rounded-lg border-2 text-base italic shrink-0 flex items-center justify-center"
+                style={{ fontFamily:"Georgia,serif", borderColor:italic?"#4a80f0":"var(--brown-pale)", background:italic?"#eef2ff":"white", color:"var(--brown-dark)" }}>I</button>
+              <label className="relative w-9 h-9 rounded-lg border-2 shrink-0 flex items-center justify-center cursor-pointer"
+                style={{ borderColor:"var(--brown-pale)" }}>
+                <span className="text-base font-bold leading-none" style={{ color }}>A</span>
+                <input type="color" value={color} onChange={e=>setColor(e.target.value)}
+                  className="absolute opacity-0 inset-0 cursor-pointer"/>
+              </label>
+              <div className="flex-1"/>
+              <button onPointerDown={e=>e.preventDefault()} onClick={commitText}
+                className="px-4 h-9 rounded-xl text-sm font-semibold text-white shrink-0"
+                style={{ background:"var(--gradient-primary)" }}>Готово</button>
+            </div>
+          )}
           {/* Brush sizes for pen/highlight/eraser/shape */}
           {(tool==="pen"||tool==="eraser"||tool==="highlight"||tool==="shape") && (
             <div className="flex gap-1 shrink-0">
