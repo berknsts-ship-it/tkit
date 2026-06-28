@@ -47,3 +47,63 @@ export async function deleteTopic(id: string) {
   await supabase.from("vocabulary_topics").delete().eq("id", id);
   revalidatePath("/tutor/vocabulary");
 }
+
+export async function updateTopicMeta(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Не авторизован" };
+
+  const id         = formData.get("id") as string;
+  const title      = (formData.get("title") as string)?.trim();
+  const student_id = (formData.get("student_id") as string) || null;
+  const language   = (formData.get("language") as string) || "en-US";
+
+  if (!title) return { error: "Введите название" };
+  await supabase.from("vocabulary_topics").update({ title, student_id, language }).eq("id", id);
+  revalidatePath(`/tutor/vocabulary/${id}`);
+  revalidatePath("/tutor/vocabulary");
+  return { ok: true };
+}
+
+export async function addWord(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Не авторизован" };
+
+  const topic_id   = formData.get("topic_id") as string;
+  const word       = (formData.get("word") as string)?.trim();
+  const translation = (formData.get("translation") as string)?.trim();
+  const example    = (formData.get("example") as string)?.trim() || null;
+
+  if (!word || !translation) return { error: "Слово и перевод обязательны" };
+
+  const { data, error } = await supabase
+    .from("vocabulary_words")
+    .insert({ topic_id, word, translation, example })
+    .select("id, word, translation, example")
+    .single();
+
+  if (error) return { error: error.message };
+  revalidatePath(`/tutor/vocabulary/${topic_id}`);
+  return { ok: true, word: data };
+}
+
+export async function deleteWord(wordId: string, topicId: string) {
+  const supabase = await createClient();
+  await supabase.from("vocabulary_words").delete().eq("id", wordId);
+  revalidatePath(`/tutor/vocabulary/${topicId}`);
+}
+
+export async function updateWord(formData: FormData) {
+  const supabase = await createClient();
+  const id          = formData.get("id") as string;
+  const topic_id    = formData.get("topic_id") as string;
+  const word        = (formData.get("word") as string)?.trim();
+  const translation = (formData.get("translation") as string)?.trim();
+  const example     = (formData.get("example") as string)?.trim() || null;
+
+  if (!word || !translation) return { error: "Слово и перевод обязательны" };
+  await supabase.from("vocabulary_words").update({ word, translation, example }).eq("id", id);
+  revalidatePath(`/tutor/vocabulary/${topic_id}`);
+  return { ok: true };
+}

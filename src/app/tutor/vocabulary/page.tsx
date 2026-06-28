@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { PlusCircle, BookMarked } from "lucide-react";
+import { PlusCircle, BookMarked, Pencil } from "lucide-react";
 import { deleteTopic } from "@/app/actions/vocabulary";
 
 export default async function VocabularyPage() {
@@ -59,15 +59,20 @@ export default async function VocabularyPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <Link href={`/tutor/vocabulary/practice?topic=${t.id}`}
-                    className="text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all"
+                  <Link href={`/tutor/vocabulary/${t.id}`}
+                    className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all"
                     style={{ background: "var(--brown-pale)", color: "var(--brown-dark)" }}>
+                    <Pencil size={13}/> Изменить
+                  </Link>
+                  <Link href={`/tutor/vocabulary/practice?topic=${t.id}`}
+                    className="text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all border"
+                    style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
                     Тренировать
                   </Link>
                   <form action={async () => { "use server"; await deleteTopic(t.id); }}>
                     <button type="submit"
                       className="text-sm px-3 py-1 rounded-lg border hover:opacity-70 transition-all"
-                      style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}>
+                      style={{ borderColor: "#f0c0b0", color: "#c06040" }}>
                       Удалить
                     </button>
                   </form>
