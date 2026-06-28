@@ -6,6 +6,7 @@ import type { BoardMaterial } from "@/components/shared/WhiteboardCanvas";
 import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { getSnapshotItems } from "@/app/actions/board";
+import PushSubscribeButton from "@/components/student/PushSubscribeButton";
 import {
   CalendarDays, ClipboardList, BookOpen, BookMarked, PenLine,
   ChevronDown, ChevronUp,
@@ -107,9 +108,10 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
           {student.name}!
         </h1>
 
-        <div className="relative flex gap-2 flex-wrap">
+        <div className="relative flex gap-2 flex-wrap items-center">
           <Chip icon="📋" label={`${homework.length} ${plural(homework.length, "задание","задания","заданий")}`} />
           <Chip icon="📅" label={`${lessons.length} ${plural(lessons.length, "урок","урока","уроков")}`} />
+          <PushSubscribeButton studentId={studentId} />
         </div>
       </div>
 

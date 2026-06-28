@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { pushToStudent } from "@/lib/push";
 
 export async function createHomework(formData: FormData): Promise<void> {
   const supabase = await createClient();
@@ -23,6 +24,16 @@ export async function createHomework(formData: FormData): Promise<void> {
     description,
     due_date,
   });
+
+  // Пуш ученику (не блокируем редирект)
+  pushToStudent(student_id, {
+    title: "Новое домашнее задание 📝",
+    body:  due_date
+      ? `«${title}» — сдать до ${new Date(due_date).toLocaleDateString("ru", { day: "numeric", month: "long" })}`
+      : `«${title}»`,
+    url:  "/student",
+    tag:  "homework-new",
+  }).catch(() => {});
 
   revalidatePath("/tutor/homework");
   redirect("/tutor/homework");
