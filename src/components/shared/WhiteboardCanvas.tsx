@@ -6,7 +6,7 @@ import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
   Maximize2, Hand, Navigation, Undo2, Redo2, Pointer, Lock, Unlock, ImagePlus, Link, FileText,
-  Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile,
+  Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile, Sparkles,
 } from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -1028,6 +1028,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [imgDialog,    setImgDialog]    = useState(false);
   const [imgUrl,       setImgUrl]       = useState("");
   const [imgUploading, setImgUploading] = useState(false);
+  const [aiLoading,   setAiLoading]   = useState(false);
+  const aiInputRef = useRef<HTMLInputElement>(null);
   const [imgError,     setImgError]     = useState<string | null>(null);
 
   // shape tool
@@ -2113,6 +2115,45 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   };
 
 
+  const handleAiLayout = async (file: File) => {
+    setAiLoading(true);
+    try {
+      const form = new FormData();
+      form.append("image", file);
+      const res = await fetch("/api/ai-layout", { method: "POST", body: form });
+      if (!res.ok) throw new Error("AI failed");
+      const { items } = await res.json();
+      if (!Array.isArray(items) || items.length === 0) return;
+
+      // Bounding box of returned items
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const it of items) {
+        minX = Math.min(minX, it.x); minY = Math.min(minY, it.y);
+        maxX = Math.max(maxX, it.x + (it.w ?? 200));
+        maxY = Math.max(maxY, it.y + (it.h ?? 40));
+      }
+      // Center layout on current viewport
+      const cont = containerRef.current!;
+      const { zoom, panX, panY } = viewRef.current;
+      const cx = (cont.clientWidth  / 2 - panX) / zoom;
+      const cy = (cont.clientHeight / 2 - panY) / zoom;
+      const dx = cx - (minX + maxX) / 2;
+      const dy = cy - (minY + maxY) / 2;
+
+      for (const raw of items) {
+        const item = { ...raw, id: uid(), x: raw.x + dx, y: raw.y + dy };
+        itemsRef.current.push(item);
+        send({ type: "path", item });
+        pushHistory({ type: "add", item });
+      }
+      render();
+    } catch (err) {
+      console.error("AI layout:", err);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const placeSymbol = (sym: string, wx: number, wy: number, fs = 32) => {
     const item: TextItem = {
       type: "text", id: uid(), x: wx, y: wy,
@@ -2638,6 +2679,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         <SideBtn active={showEmojiPicker} onClick={()=>{setShowShapeMenu(false);setShowFrameMenu(false);setShowEmojiPicker(v=>!v);}} title="Эмодзи">
           <span className="text-base leading-none">😊</span>
         </SideBtn>
+        {role === "tutor" && (
+          <SideBtn active={false} onClick={() => aiInputRef.current?.click()} title="AI-макет из скрина">
+            {aiLoading ? <span className="text-xs animate-spin">⟳</span> : <Sparkles size={16}/>}
+          </SideBtn>
+        )}
         <div className="flex-1"/>
         {/* More tools at bottom */}
         <div className="w-8 h-px mx-auto mb-1" style={{ background:"var(--brown-pale)" }}/>
@@ -3958,6 +4004,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           </button>
         </div>
 
+        {/* Hidden input for AI layout upload — always mounted */}
+        <input ref={aiInputRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if(f) { handleAiLayout(f); e.target.value = ""; } }}/>
+
         {/* Mobile zoom HUD — top center, always visible, tap % to reset */}
         <div className="sm:hidden absolute top-2 left-1/2 z-[55] flex items-center rounded-full pointer-events-auto select-none"
           style={{ transform:"translateX(-50%)", background:"rgba(255,255,255,0.94)", border:"1px solid var(--brown-pale)", boxShadow:"0 1px 6px rgba(0,0,0,0.13)" }}>
@@ -4011,6 +4061,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           <ToolBtn active={showEmojiPicker} onClick={() => { commitText(); setShowEmojiPicker(v => !v); }} title="">
             <Smile size={19}/>
           </ToolBtn>
+          {/* AI Layout */}
+          {role === "tutor" && (
+            <ToolBtn active={false} onClick={() => aiInputRef.current?.click()} title="">
+              {aiLoading ? <span className="text-sm animate-spin">⟳</span> : <Sparkles size={18}/>}
+            </ToolBtn>
+          )}
           <div className="flex-1 shrink-0 min-w-2"/>
           {role==="tutor" && (
             <button onClick={bringToMe} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border-2 font-medium shrink-0"
