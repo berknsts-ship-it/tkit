@@ -4072,7 +4072,9 @@ function DiceOverlay({ item, sp, sw, sh, selected, onRoll }:
   return (
     <div className="absolute flex flex-col items-center justify-center rounded-xl select-none overflow-hidden"
       style={{ left:sp.x, top:sp.y, width:sw, height:sh, zIndex:20,
-        background:"linear-gradient(135deg,#1a1a2e,#16213e)",
+        background:"white",
+        border:"2px solid var(--brown-pale)",
+        boxShadow:"0 4px 16px rgba(59,42,26,0.14)",
         outline: selected ? "2px solid #4a80f0" : "none" }}
       onTouchStart={e => { touchRef.current = { y:e.touches[0].clientY, t:Date.now() }; e.stopPropagation(); }}
       onTouchEnd={e => { e.stopPropagation(); const dy=touchRef.current.y-e.changedTouches[0].clientY; if(Math.abs(dy)>35)roll(); }}>
@@ -4084,11 +4086,11 @@ function DiceOverlay({ item, sp, sw, sh, selected, onRoll }:
         ))}
       </div>
       {item.count > 1 && !rolling && (
-        <div style={{ color:"#ffffff99", fontSize:11 }}>= {display.reduce((a,b)=>a+b,0)}</div>
+        <div style={{ color:"var(--brown-light)", fontSize:11 }}>= {display.reduce((a,b)=>a+b,0)}</div>
       )}
       <button onClick={e=>{e.stopPropagation();roll();}} disabled={rolling}
         className="mt-1 px-3 py-0.5 rounded-lg text-xs font-medium"
-        style={{ background:rolling?"#444":"#4a80f0", color:"#fff", opacity:rolling?0.6:1 }}>
+        style={{ background:rolling?"var(--brown-pale)":"var(--gradient-primary)", color:rolling?"var(--brown-mid)":"#fff", opacity:rolling?0.7:1 }}>
         {rolling?"...":"Бросить"}
       </button>
     </div>
