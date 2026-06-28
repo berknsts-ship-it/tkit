@@ -24,6 +24,7 @@ export default async function StudentPage({ params }: Props) {
     { data: materials },
     { data: allArticles },
     { data: snapshots },
+    { data: topicsRaw },
   ] = await Promise.all([
     supabase.from("lessons").select("*").eq("student_id", student.id)
       .eq("status", "scheduled").order("scheduled_at"),
@@ -39,6 +40,10 @@ export default async function StudentPage({ params }: Props) {
       .order("sort_order").order("created_at"),
     supabase.from("board_snapshots")
       .select("id, title, created_at")
+      .eq("student_id", student.id)
+      .order("created_at", { ascending: false }),
+    supabase.from("vocabulary_topics")
+      .select("id, title, vocabulary_words(id, word, translation, example)")
       .eq("student_id", student.id)
       .order("created_at", { ascending: false }),
   ]);
@@ -61,6 +66,10 @@ export default async function StudentPage({ params }: Props) {
       materials={materials ?? []}
       articles={articles.map(a => ({ id: a.id, title: a.title, content: a.content }))}
       snapshots={snapshots ?? []}
+      topics={(topicsRaw ?? []).map(t => ({
+        id: t.id, title: t.title,
+        words: (t.vocabulary_words ?? []) as { id: string; word: string; translation: string; example?: string | null }[],
+      }))}
     />
   );
 }
