@@ -1120,7 +1120,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
   // ── mobile detection ─────────────────────────────────────────────────────────
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 640);
+    // Touch devices under 1024px (phones + tablets) use bottom sheet for text input.
+    // Tablets at ≥640px still see the desktop sidebar/toolbar layout via CSS,
+    // but text editing goes through the keyboard-friendly bottom sheet.
+    const check = () => setIsMobile(
+      (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) && window.innerWidth < 1024
+    );
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -3631,8 +3636,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           const toolbarLeft = Math.max(4, Math.min(textScr.x - TOOLBAR_W / 2, containerW - TOOLBAR_W - 4));
           return (
             <>
-              {/* ── Floating toolbar above text (desktop only, too wide for mobile) ── */}
-              <div className="absolute pointer-events-auto hidden sm:flex items-center gap-0.5 px-2 py-1 rounded-2xl shadow-2xl border"
+              {/* ── Floating toolbar above text (desktop only — touch devices use bottom sheet) ── */}
+              {!isMobile && <div className="absolute pointer-events-auto hidden sm:flex items-center gap-0.5 px-2 py-1 rounded-2xl shadow-2xl border"
                 style={{ top: toolbarTop, left: toolbarLeft, width: TOOLBAR_W,
                   background:"white", borderColor:"var(--brown-pale)", zIndex:60 }}
                 onMouseDown={e => e.preventDefault()}>
@@ -3695,7 +3700,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 <button onMouseDown={e=>e.preventDefault()} onClick={commitText}
                   className="px-3 h-8 rounded-xl text-xs font-semibold text-white shrink-0"
                   style={{ background:"var(--gradient-primary)" }}>Готово</button>
-              </div>
+              </div>}
               {/* ── Inline textarea — Miro-style: desktop only ── */}
               {!isMobile && (() => {
                 const handleStyle: React.CSSProperties = {
