@@ -36,24 +36,26 @@ export default function OgImage() {
 
         {/* Content */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24, zIndex: 1 }}>
-          {/* Logo badge */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 100, height: 100, borderRadius: 24,
-            background: "linear-gradient(135deg, #7c5c3e 0%, #b8956a 100%)",
-            boxShadow: "0 8px 32px rgba(124,92,62,0.45)",
-          }}>
-            <span style={{
-              fontSize: 52, fontWeight: 900, fontStyle: "italic",
-              color: "#fff", letterSpacing: -2, lineHeight: 1,
-              fontFamily: "Georgia, serif",
-            }}>T</span>
-            <span style={{
-              fontSize: 26, fontWeight: 700,
-              color: "rgba(255,255,255,0.88)", letterSpacing: 1,
-              marginLeft: 2, marginTop: 14,
-              fontFamily: "Georgia, serif",
-            }}>Kit</span>
+          {/* Logo — T-shape icon */}
+          <div style={{ display: "flex", position: "relative", width: 88, height: 104 }}>
+            {/* Crossbar */}
+            <div style={{
+              position: "absolute", top: 0, left: 0,
+              width: 88, height: 28,
+              background: "#3b2a1a", borderRadius: 6,
+            }} />
+            {/* Stem */}
+            <div style={{
+              position: "absolute", top: 26, left: 24,
+              width: 40, height: 78,
+              background: "#3b2a1a", borderRadius: 5,
+            }} />
+            {/* Accent */}
+            <div style={{
+              position: "absolute", top: 28, left: 2,
+              width: 20, height: 20,
+              background: "#7c3a1e", borderRadius: 4,
+            }} />
           </div>
 
           {/* Title */}
