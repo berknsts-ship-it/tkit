@@ -3459,7 +3459,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               )}
               {/* Duplicate + Crop + Delete buttons — flip below item if near top of canvas */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
-                style={{ top: tl.y > 36 ? -28 : sh + 4, right:0 }}>
+                style={{ top: tl.y > 36 ? -28 : sh + 4, right:0, zIndex:36 }}>
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
                   className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
