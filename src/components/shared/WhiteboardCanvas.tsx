@@ -3452,9 +3452,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
               )}
-              {/* Duplicate + Crop + Delete buttons (top-right area) */}
+              {/* Duplicate + Crop + Delete buttons — flip below item if near top of canvas */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
-                style={{ top:-28, right:0 }}>
+                style={{ top: tl.y > 36 ? -28 : sh + 4, right:0 }}>
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
                   className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
@@ -3466,15 +3466,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 )}
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
                   onClick={() => {
-                    setSelectedIds(ids => {
-                      const toRemove = ids.size > 0 ? ids : new Set([selectedItem.id]);
-                      pushHistory({ type:"clear", saved:[...itemsRef.current] });
-                      itemsRef.current = itemsRef.current.filter(i => !toRemove.has(i.id));
-                      render(); send({ type:"clear" });
-                      itemsRef.current.forEach(item => send({ type:"path", item }));
-                      setSelectedId(null);
-                      return new Set();
-                    });
+                    const toRemove = new Set(selectedIds.size > 0 ? selectedIds : [selectedItem.id]);
+                    pushHistory({ type:"clear", saved:[...itemsRef.current] });
+                    itemsRef.current = itemsRef.current.filter(i => !toRemove.has(i.id));
+                    render(); send({ type:"clear" });
+                    itemsRef.current.forEach(item => send({ type:"path", item }));
+                    setSelectedId(null);
+                    setSelectedIds(new Set());
                   }}
                   className="rounded-lg px-2 py-1 text-xs font-medium text-white hover:opacity-80 flex items-center justify-center"
                   style={{ background:"#e05030", minHeight:28, minWidth:28 }}>
