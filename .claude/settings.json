@@ -5,7 +5,9 @@
       "Bash(npx tsc *)",
       "Bash(cd /Users/anastasia/wordbox && npm install pdfjs-dist --legacy-peer-deps 2>&1 | tail -5)",
       "Read(//Users/anastasia/wordbox/**)",
-      "Bash(find /Users/anastasia/wordbox -name \"*.sql\" ! -path \"*/node_modules/*\" | xargs grep -l \"lessons\\\\|lesson\" 2>/dev/null)"
+      "Bash(find /Users/anastasia/wordbox -name \"*.sql\" ! -path \"*/node_modules/*\" | xargs grep -l \"lessons\\\\|lesson\" 2>/dev/null)",
+      "Bash(grep -n \"min-w\\\\|white-space\" /Users/anastasia/wordbox/src/components/student/tabs/GrammarTab.tsx | head -15)",
+      "Read(//Users/anastasia/wordbox/src/components/student/tabs/**)"
     ],
     "defaultMode": "bypassPermissions"
   }

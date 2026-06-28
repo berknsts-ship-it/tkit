@@ -3910,7 +3910,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Wheel edit dialog */}
         {editWheelId && (
           <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.4)" }}
-            onClick={e => { if (e.target === e.currentTarget) setEditWheelId(null); }}>
+            onClick={e => { if (e.target === e.currentTarget) setEditWheelId(null); }}
+            onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="w-full max-w-sm rounded-2xl border shadow-2xl p-5"
               style={{ background:"white", borderColor:"var(--brown-pale)" }}>
               <div className="font-semibold mb-3 text-sm" style={{ color:"var(--brown-dark)" }}>🎡 Варианты колеса</div>
@@ -3933,7 +3934,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Emoji picker panel — fixed, right of sidebar */}
         {showEmojiPicker && (
           <div className="absolute inset-y-0 left-0 z-[100] flex"
-            onClick={e => { if (e.target === e.currentTarget) setShowEmojiPicker(false); }}>
+            onClick={e => { if (e.target === e.currentTarget) setShowEmojiPicker(false); }}
+            onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="flex flex-col shadow-2xl border-r h-full"
               style={{ width:320, background:"white", borderColor:"var(--brown-pale)" }}>
               {/* Header */}
@@ -3990,7 +3992,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {imgDialog && (
           <div className="absolute inset-0 flex items-center justify-center z-50"
             style={{ background:"rgba(0,0,0,0.35)" }}
-            onClick={() => setImgDialog(false)}>
+            onClick={() => setImgDialog(false)}
+            onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="rounded-2xl border shadow-2xl p-5 w-full max-w-sm mx-4"
               style={{ background:"white", borderColor:"var(--brown-pale)" }}
               onClick={e => e.stopPropagation()}>
@@ -4004,7 +4007,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     <input value={imgUrl} onChange={e => { setImgUrl(e.target.value); setImgError(null); }}
                       onKeyDown={e => e.key==="Enter" && addImageToBoard(imgUrl)}
                       placeholder="https://..."
-                      autoFocus
+                      autoFocus={!isMobile}
                       className="flex-1 px-3 py-2 rounded-xl border outline-none text-sm"
                       style={{ borderColor: imgError ? "#e05050" : "var(--brown-pale)", color:"var(--brown-dark)" }}/>
                     <button onClick={() => addImageToBoard(imgUrl)}
@@ -4040,7 +4043,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Table size picker */}
         {showTablePicker && (
           <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.4)" }}
-            onClick={e => { if (e.target === e.currentTarget) setShowTablePicker(false); }}>
+            onClick={e => { if (e.target === e.currentTarget) setShowTablePicker(false); }}
+            onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="rounded-2xl border shadow-2xl p-5 w-72" style={{ background:"white", borderColor:"var(--brown-pale)" }}>
               <div className="font-semibold mb-4 text-sm" style={{ color:"var(--brown-dark)" }}>⊞ Создать таблицу</div>
               <div className="flex items-center gap-3 mb-3">
@@ -4128,7 +4132,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Mobile zoom HUD — top center, always visible, tap % to reset */}
         <div className="sm:hidden absolute top-2 left-1/2 z-[55] flex items-center rounded-full pointer-events-auto select-none"
           style={{ transform:"translateX(-50%)", background:"rgba(255,255,255,0.94)", border:"1px solid var(--brown-pale)", boxShadow:"0 1px 6px rgba(0,0,0,0.13)" }}>
-          <button onClick={() => zoomCenter(1/1.3)} className="px-2 py-1.5 rounded-l-full hover:opacity-70"
+          <button onClick={() => zoomCenter(1/1.3)} onTouchEnd={e=>e.stopPropagation()} className="px-2 py-1.5 rounded-l-full hover:opacity-70"
             style={{ color:"var(--brown-dark)" }}><ZoomOut size={14}/></button>
           <button
             onClick={() => {
@@ -4138,12 +4142,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               const cx = c.clientWidth / 2, cy = c.clientHeight / 2;
               applyView(1, cx - (cx - panX) / zoom, cy - (cy - panY) / zoom);
             }}
+            onTouchEnd={e=>e.stopPropagation()}
             className="text-xs font-bold px-1 tabular-nums"
             title="Сбросить до 100%"
             style={{ minWidth:44, textAlign:"center", color: vpZoom !== 100 ? "#e05030" : "var(--brown-dark)" }}>
             {vpZoom}%
           </button>
-          <button onClick={() => zoomCenter(1.3)} className="px-2 py-1.5 rounded-r-full hover:opacity-70"
+          <button onClick={() => zoomCenter(1.3)} onTouchEnd={e=>e.stopPropagation()} className="px-2 py-1.5 rounded-r-full hover:opacity-70"
             style={{ color:"var(--brown-dark)" }}><ZoomIn size={14}/></button>
         </div>
       </div>
@@ -4206,7 +4211,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {SIZES.map(s => (
                 <button key={s} onClick={() => setSize(s)}
                   className="flex items-center justify-center rounded-full border-2 shrink-0 transition-all"
-                  style={{ width:30, height:30, borderColor:size===s?"var(--brown-dark)":"var(--brown-pale)", opacity:size===s?1:0.4 }}>
+                  style={{ width:38, height:38, borderColor:size===s?"var(--brown-dark)":"var(--brown-pale)", opacity:size===s?1:0.4 }}>
                   <div className="rounded-full" style={{ width:Math.min(s+2,22), height:Math.min(s+2,22), background:"var(--brown-dark)" }}/>
                 </button>
               ))}
@@ -4218,7 +4223,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               <div className="w-px mx-0.5 self-stretch" style={{ background:"var(--brown-pale)" }}/>
               {SHAPE_KINDS.map(k => (
                 <button key={k.v} onClick={() => setShapeKind(k.v)}
-                  className="w-8 h-8 rounded-lg border-2 text-base flex items-center justify-center shrink-0 transition-all"
+                  className="w-10 h-10 rounded-lg border-2 text-base flex items-center justify-center shrink-0 transition-all"
                   style={{ borderColor:shapeKind===k.v?"var(--brown-dark)":"transparent", opacity:shapeKind===k.v?1:0.45 }}
                   title={k.label}>
                   {k.icon}
@@ -4233,10 +4238,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {COLORS.map(c => (
                 <button key={c} onClick={() => setColor(c)}
                   className="rounded-full border-2 shrink-0"
-                  style={{ width:28,height:28,background:c,borderColor:color===c?"var(--brown-dark)":"transparent",boxShadow:c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>
+                  style={{ width:34,height:34,background:c,borderColor:color===c?"var(--brown-dark)":"transparent",boxShadow:c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>
               ))}
               <label className="relative rounded-full border-2 shrink-0 overflow-hidden cursor-pointer"
-                style={{ width:28,height:28,borderColor:!COLORS.includes(color)?"var(--brown-dark)":"var(--brown-pale)",background:color }}
+                style={{ width:34,height:34,borderColor:!COLORS.includes(color)?"var(--brown-dark)":"var(--brown-pale)",background:color }}
                 title="Свой цвет">
                 <input type="color" value={color} onChange={e => setColor(e.target.value)}
                   className="absolute opacity-0 w-full h-full cursor-pointer" style={{ top:0,left:0 }}/>
@@ -4249,10 +4254,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {HIGHLIGHT_COLORS.map(c => (
                 <button key={c} onClick={() => setHlColor(c)}
                   className="rounded-full border-2 shrink-0"
-                  style={{ width:28,height:28,background:c,borderColor:hlColor===c?"var(--brown-dark)":"transparent" }}/>
+                  style={{ width:34,height:34,background:c,borderColor:hlColor===c?"var(--brown-dark)":"transparent" }}/>
               ))}
               <label className="relative rounded-full border-2 shrink-0 overflow-hidden cursor-pointer"
-                style={{ width:28,height:28,borderColor:!HIGHLIGHT_COLORS.includes(hlColor)?"var(--brown-dark)":"var(--brown-pale)",background:hlColor }}
+                style={{ width:34,height:34,borderColor:!HIGHLIGHT_COLORS.includes(hlColor)?"var(--brown-dark)":"var(--brown-pale)",background:hlColor }}
                 title="Свой цвет">
                 <input type="color" value={hlColor} onChange={e => setHlColor(e.target.value)}
                   className="absolute opacity-0 w-full h-full cursor-pointer" style={{ top:0,left:0 }}/>
@@ -4264,7 +4269,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             {RULING_OPTIONS.map(({ v, title }) => (
               <button key={v} onClick={() => setRuling(v)} title={title}
                 className="flex items-center justify-center rounded-lg border-2"
-                style={{ width:30, height:30, borderColor:ruling===v?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:ruling===v?1:0.4 }}>
+                style={{ width:36, height:36, borderColor:ruling===v?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:ruling===v?1:0.4 }}>
                 <RulingIcon v={v}/>
               </button>
             ))}
@@ -4273,7 +4278,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 {(["S","M","L"] as RulingSize[]).map(sz => (
                   <button key={sz} onClick={() => setSzRuling(sz)}
                     className="text-xs font-bold rounded border-2"
-                    style={{ width:24, height:24, borderColor:rulingSize===sz?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:rulingSize===sz?1:0.4 }}>
+                    style={{ width:32, height:32, borderColor:rulingSize===sz?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity:rulingSize===sz?1:0.4 }}>
                     {sz}
                   </button>
                 ))}
