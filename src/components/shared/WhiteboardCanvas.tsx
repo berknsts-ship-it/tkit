@@ -3453,6 +3453,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     background: locked?"#e09020":"#4a80f0", border:"none" }}
                   onMouseDown={e => e.stopPropagation()}
                   onTouchStart={e => e.stopPropagation()}
+                  onTouchEnd={e => e.stopPropagation()}
                   onClick={() => toggleLock(selectedItem.id)}>
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
@@ -3460,16 +3461,16 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {/* Duplicate + Crop + Delete buttons — flip below item if near top of canvas */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
                 style={{ top: tl.y > 36 ? -28 : sh + 4, right:0, zIndex:36 }}>
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
                   className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>⧉</button>
                 {selectedItem.type === "image" && (
-                  <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onClick={() => setCropId(selectedItem.id)}
+                  <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} onClick={() => setCropId(selectedItem.id)}
                     className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
                     style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>✂</button>
                 )}
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
                   onClick={() => {
                     const toRemove = new Set(selectedIds.size > 0 ? selectedIds : [selectedItem.id]);
                     pushHistory({ type:"clear", saved:[...itemsRef.current] });
@@ -3490,6 +3491,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   style={{ right:-14, top:-14, width:34, height:34, zIndex:31, cursor:"pointer",
                     background:"#4a80f0", border:"2px solid white", boxShadow:"0 2px 8px rgba(74,128,240,0.4)" }}
                   onMouseDown={e => e.stopPropagation()}
+                  onTouchStart={e => e.stopPropagation()}
+                  onTouchEnd={e => e.stopPropagation()}
                   onClick={() => {
                     const ti = selectedItem as TextItem;
                     editingIdRef.current = ti.id; setEditingId(ti.id);
