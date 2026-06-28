@@ -1866,6 +1866,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           else if (drag.corner === "ne") { y = y + dy; ow = Math.max(20, ow + dx); oh = Math.max(20, oh - dy); }
           else { x = x + dx; y = y + dy; ow = Math.max(20, ow - dx); oh = Math.max(20, oh - dy); }
           itemsRef.current[idx] = { ...orig, x, y, w: ow, h: oh };
+        } else if (drag.mode === "resize") {
+          const item = itemsRef.current[idx] as TextItem;
+          const tb = textBounds({ ...item, fontSize: drag.origFontSize } as TextItem);
+          const newDiag = Math.max(20, Math.hypot(w.x - tb.x0, w.y - tb.y0));
+          (itemsRef.current[idx] as TextItem).fontSize = Math.max(8, Math.round(drag.origFontSize * newDiag / drag.origDiag));
         }
         render();
       }
@@ -3420,8 +3425,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {/* Resize handle — text only */}
               {selectedItem.type === "text" && !locked && (
                 <div className="absolute pointer-events-auto"
-                  style={{ right:-7, bottom:-7, width:14, height:14, cursor:"se-resize",
-                    background:"white", border:"2px solid #4a80f0", borderRadius:3 }}
+                  style={{ right:-9, bottom:-9, width:20, height:20, cursor:"se-resize",
+                    background:"white", border:"2px solid #4a80f0", borderRadius:4,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:9, color:"#4a80f0", userSelect:"none" }}
                   onMouseDown={e => {
                     e.stopPropagation();
                     const ti = selectedItem as TextItem;
@@ -3433,7 +3440,20 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                       origFontSize: ti.fontSize,
                       origDiag: Math.max(20, Math.hypot(tb.w, tb.h)),
                     };
-                  }}/>
+                  }}
+                  onTouchStart={e => {
+                    e.stopPropagation(); e.preventDefault();
+                    const ti = selectedItem as TextItem;
+                    const tb = textBounds(ti);
+                    const rect = containerRef.current!.getBoundingClientRect();
+                    selDragRef.current = { mode:"resize", id:ti.id,
+                      wx0: (e.touches[0].clientX - rect.left - viewRef.current.panX) / viewRef.current.zoom,
+                      wy0: (e.touches[0].clientY - rect.top  - viewRef.current.panY) / viewRef.current.zoom,
+                      origItem: { ...ti },
+                      origFontSize: ti.fontSize,
+                      origDiag: Math.max(20, Math.hypot(tb.w, tb.h)),
+                    };
+                  }}>↘</div>
               )}
               {/* Resize handles — image and frame */}
               {(selectedItem.type === "image" || selectedItem.type === "frame") && !locked && (
@@ -3934,6 +3954,28 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             <MapIcon size={16}/>
           </button>
         </div>
+
+        {/* Mobile zoom HUD — top center, always visible, tap % to reset */}
+        <div className="sm:hidden absolute top-2 left-1/2 z-[55] flex items-center rounded-full pointer-events-auto select-none"
+          style={{ transform:"translateX(-50%)", background:"rgba(255,255,255,0.94)", border:"1px solid var(--brown-pale)", boxShadow:"0 1px 6px rgba(0,0,0,0.13)" }}>
+          <button onClick={() => zoomCenter(1/1.3)} className="px-2 py-1.5 rounded-l-full hover:opacity-70"
+            style={{ color:"var(--brown-dark)" }}><ZoomOut size={14}/></button>
+          <button
+            onClick={() => {
+              const c = containerRef.current;
+              if (!c) return;
+              const { zoom, panX, panY } = viewRef.current;
+              const cx = c.clientWidth / 2, cy = c.clientHeight / 2;
+              applyView(1, cx - (cx - panX) / zoom, cy - (cy - panY) / zoom);
+            }}
+            className="text-xs font-bold px-1 tabular-nums"
+            title="Сбросить до 100%"
+            style={{ minWidth:44, textAlign:"center", color: vpZoom !== 100 ? "#e05030" : "var(--brown-dark)" }}>
+            {vpZoom}%
+          </button>
+          <button onClick={() => zoomCenter(1.3)} className="px-2 py-1.5 rounded-r-full hover:opacity-70"
+            style={{ color:"var(--brown-dark)" }}><ZoomIn size={14}/></button>
+        </div>
       </div>
 
       {/* Mobile toolbar */}
@@ -3975,9 +4017,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           )}
           <button onClick={undo} disabled={!canUndo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Undo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
           <button onClick={redo} disabled={!canRedo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Redo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
-          <button onClick={() => zoomCenter(1/1.3)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><ZoomOut size={16} style={{ color:"var(--brown-dark)" }}/></button>
-          <span className="text-xs w-9 text-center shrink-0" style={{ color:"var(--brown-mid)" }}>{vpZoom}%</span>
-          <button onClick={() => zoomCenter(1.3)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><ZoomIn size={16} style={{ color:"var(--brown-dark)" }}/></button>
           <button onClick={() => applyView(1,0,0)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Maximize2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
         </div>
         {/* Row 2: context — sizes + colors / shapes / ruling */}
