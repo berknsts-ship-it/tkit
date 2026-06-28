@@ -2567,7 +2567,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   }, []);
 
   return (
-    <div className="flex flex-1 overflow-hidden select-none">
+    <div className="flex flex-1 overflow-hidden select-none" style={{ touchAction: "none" }}>
 
       {/* Vertical sidebar */}
       <aside className="hidden sm:flex flex-col items-center gap-1 py-2 border-r shrink-0 relative transition-all duration-200"
@@ -3940,7 +3940,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       <div className="flex sm:hidden flex-col border-t shrink-0" style={{ borderColor:"var(--brown-pale)", background:"white" }}
         onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
         {/* Row 1: tools + controls */}
-        <div className="flex items-center gap-1 px-2 py-1.5 border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)" }}>
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)", touchAction:"pan-x" }}>
           {([
             { t:"select" as Tool, icon:<Pointer size={19}/> },
             { t:"pen" as Tool,       icon:<Pencil size={19}/> },
@@ -3981,7 +3981,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           <button onClick={() => applyView(1,0,0)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Maximize2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
         </div>
         {/* Row 2: context — sizes + colors / shapes / ruling */}
-        <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto">
+        <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto" style={{ touchAction:"pan-x" }}>
           {/* Brush sizes for pen/highlight/eraser/shape */}
           {(tool==="pen"||tool==="eraser"||tool==="highlight"||tool==="shape") && (
             <div className="flex gap-1 shrink-0">
