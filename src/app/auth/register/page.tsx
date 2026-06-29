@@ -247,7 +247,7 @@ export default function RegisterPage() {
               <input type="text" value={betaCode}
                 onChange={e => setBetaCode(e.target.value.toUpperCase())}
                 required placeholder="BETA-XXXX"
-                maxLength={9}
+                maxLength={20}
                 className="w-full px-4 py-2.5 rounded-xl border outline-none font-mono tracking-widest"
                 style={{ ...inputStyle, letterSpacing: "0.12em" }} />
             </div>
