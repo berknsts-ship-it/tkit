@@ -36,10 +36,13 @@ export const metadata: Metadata = {
     title: "T-Kit — платформа для репетиторов",
     description: "Расписание, домашние задания, интерактивная доска и словарь — всё в одном месте",
   },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     title: "T-Kit",
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
   },
 };
 
