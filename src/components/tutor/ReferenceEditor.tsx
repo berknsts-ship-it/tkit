@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { createArticle, updateArticle } from "@/app/actions/reference";
 import { useRouter } from "next/navigation";
 import { Sparkles, ChevronDown, ChevronUp, ImagePlus, X } from "lucide-react";
@@ -41,7 +41,14 @@ export default function ReferenceEditor({ students, article }: Props) {
   const [preview, setPreview]       = useState(false);
   const [imageFile, setImageFile]   = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [aiRemaining, setAiRemaining] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/ai/usage").then(r => r.json()).then(d => {
+      if (typeof d.remaining === "number") setAiRemaining(d.remaining);
+    }).catch(() => {});
+  }, []);
 
   function pickImage(file: File) {
     setImageFile(file);
@@ -61,7 +68,7 @@ export default function ReferenceEditor({ students, article }: Props) {
     setAiLoading(true);
     setAiError(null);
     try {
-      let data: { text?: string; error?: string };
+      let data: { text?: string; error?: string; remaining?: number };
       if (imageFile) {
         const fd = new FormData();
         fd.append("image", imageFile);
@@ -77,8 +84,13 @@ export default function ReferenceEditor({ students, article }: Props) {
         });
         data = await res.json();
       }
-      if (data.text) setContent(data.text);
-      else setAiError(data.error ?? "Ошибка ИИ");
+      if (data.text) {
+        setContent(data.text);
+        if (typeof data.remaining === "number") setAiRemaining(data.remaining);
+        else setAiRemaining(prev => prev !== null ? Math.max(0, prev - 1) : null);
+      } else {
+        setAiError(data.error ?? "Ошибка ИИ");
+      }
     } finally {
       setAiLoading(false);
     }
@@ -127,9 +139,16 @@ export default function ReferenceEditor({ students, article }: Props) {
 
       {/* AI-блок */}
       <div className="rounded-xl border p-4 space-y-3" style={cardStyle}>
-        <div className="flex items-center gap-2">
-          <Sparkles size={15} style={{ color: "var(--brown-mid)" }}/>
-          <span className="text-sm font-medium" style={{ color: "var(--brown-dark)" }}>Помощник ИИ</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} style={{ color: "var(--brown-mid)" }}/>
+            <span className="text-sm font-medium" style={{ color: "var(--brown-dark)" }}>Помощник ИИ</span>
+          </div>
+          {aiRemaining !== null && (
+            <span className="text-xs" style={{ color: aiRemaining <= 5 ? "#c0392b" : "var(--brown-light)" }}>
+              Осталось {aiRemaining}/30 запросов
+            </span>
+          )}
         </div>
 
         {/* Загрузка скрина */}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeAiRequest } from "@/lib/aiUsage";
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -16,6 +17,9 @@ const SYSTEM = `Ты помощник репетитора. Тебе показ�
 Если на скрине текст на другом языке — переводи на русский (если не просят иначе).`;
 
 export async function POST(req: NextRequest) {
+  const usage = await consumeAiRequest();
+  if (!usage.ok) return NextResponse.json({ error: usage.error }, { status: 429 });
+
   const form = await req.formData();
   const file   = form.get("image") as File | null;
   const prompt = (form.get("prompt") as string | null)?.trim();
@@ -65,5 +69,5 @@ export async function POST(req: NextRequest) {
 
   const data = await res.json();
   const text = (data.choices?.[0]?.message?.content ?? "").trim();
-  return NextResponse.json({ text });
+  return NextResponse.json({ text, remaining: usage.remaining });
 }

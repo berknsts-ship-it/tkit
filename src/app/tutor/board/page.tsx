@@ -56,15 +56,15 @@ export default async function BoardPage({ searchParams }: Props) {
   const activeStudent = students.find(s => s.id === studentId);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className="flex flex-col" style={{ height: "calc(100dvh - 56px)" }}>
       {/* Шапка */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b flex-wrap shrink-0"
+      <div className="flex items-center border-b shrink-0"
         style={{ borderColor: "var(--brown-pale)", background: "white" }}>
-        <span className="font-semibold text-sm shrink-0" style={{ color: "var(--brown-dark)" }}>Доска</span>
-        <div className="flex gap-2 flex-wrap overflow-x-auto">
+        <span className="font-semibold text-sm shrink-0 px-3 py-2.5" style={{ color: "var(--brown-dark)" }}>Доска</span>
+        <div className="flex gap-2 overflow-x-auto px-1 py-2" style={{ touchAction: "pan-x" }}>
           {students.map(s => (
             <Link key={s.id} href={`/tutor/board?student=${s.id}`}
-              className="text-sm px-3 py-1 rounded-lg border transition-all whitespace-nowrap"
+              className="text-sm px-3 py-1 rounded-lg border transition-all whitespace-nowrap shrink-0"
               style={{
                 borderColor: s.id === studentId ? "var(--brown-dark)" : "var(--brown-pale)",
                 background:  s.id === studentId ? "var(--brown-pale)" : "transparent",

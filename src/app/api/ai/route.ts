@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeAiRequest } from "@/lib/aiUsage";
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -46,6 +47,9 @@ export async function POST(req: NextRequest) {
   const { prompt, mode } = await req.json();
   if (!prompt) return NextResponse.json({ error: "No prompt" }, { status: 400 });
 
+  const usage = await consumeAiRequest();
+  if (!usage.ok) return NextResponse.json({ error: usage.error }, { status: 429 });
+
   const system = systemPrompts[mode] ?? systemPrompts.reference;
   // Short outputs (hints/examples) → fast 8b model with higher free TPM limit
   const model = (mode === "vocabulary_example" || mode === "vocabulary_hint")
@@ -78,5 +82,5 @@ export async function POST(req: NextRequest) {
 
   const data = await res.json();
   const text = (data.choices?.[0]?.message?.content ?? "").trim();
-  return NextResponse.json({ text });
+  return NextResponse.json({ text, remaining: usage.remaining });
 }

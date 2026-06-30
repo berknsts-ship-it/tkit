@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeAiRequest } from "@/lib/aiUsage";
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -110,6 +111,9 @@ fontSize карточек: 18 для коротких слов, 15 для фра
 function makeId() { return Math.random().toString(36).slice(2, 10); }
 
 export async function POST(req: NextRequest) {
+  const usage = await consumeAiRequest();
+  if (!usage.ok) return NextResponse.json({ error: usage.error }, { status: 429 });
+
   const { prompt, anchor, existingCount } = await req.json() as {
     prompt: string;
     anchor: { x: number; y: number };
