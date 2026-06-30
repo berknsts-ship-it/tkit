@@ -4,7 +4,6 @@ import { useRef, useState, useTransition, useCallback } from "react";
 import WhiteboardCanvas, { BoardMaterial, WhiteboardRef } from "@/components/shared/WhiteboardCanvas";
 import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
-import BoardAI from "@/components/shared/BoardAI";
 import { saveSnapshot, deleteSnapshot, getSnapshotItems, renameSnapshot } from "@/app/actions/board";
 import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2 } from "lucide-react";
 
@@ -121,59 +120,61 @@ export default function BoardView({
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Переключатель */}
-      <div className="flex items-center gap-2 px-4 py-1.5 border-b shrink-0 flex-wrap"
-        style={{ borderColor: "var(--brown-pale)", background: "#fdf8f0" }}>
+      <div className="flex items-center gap-2 border-b shrink-0 overflow-x-auto px-3 py-1.5"
+        style={{ borderColor: "var(--brown-pale)", background: "#fdf8f0", touchAction: "pan-x" }}>
         <button onClick={() => setMode("builtin")}
-          className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium transition-all"
+          className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium transition-all shrink-0"
           style={{ background: mode==="builtin" ? "var(--gradient-primary)" : "transparent",
                    color: mode==="builtin" ? "white" : "var(--brown-mid)" }}>
-          <PenLine size={14}/> Встроенная доска
+          <PenLine size={14}/> <span className="hidden sm:inline">Встроенная</span><span className="sm:hidden">Доска</span>
         </button>
         <button onClick={() => setMode("external")}
-          className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium transition-all"
+          className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium transition-all shrink-0"
           style={{ background: mode==="external" ? "var(--gradient-primary)" : "transparent",
                    color: mode==="external" ? "white" : "var(--brown-mid)" }}>
-          <Globe size={14}/> Внешняя доска
+          <Globe size={14}/> <span className="hidden sm:inline">Внешняя</span><span className="sm:hidden">Внешняя</span>
         </button>
 
         {mode === "builtin" && <>
           <div className="w-px h-5 shrink-0" style={{ background: "var(--brown-pale)" }}/>
           {showSaveForm ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <input value={saveTitle} onChange={e => setSaveTitle(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSave()}
                 placeholder={new Date().toLocaleDateString("ru", { day: "numeric", month: "long" })}
                 autoFocus
                 className="text-sm px-3 py-1 rounded-lg border outline-none"
-                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)", width: 200 }} />
+                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)", width: 160 }} />
               <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-1 text-sm px-3 py-1 rounded-lg font-medium text-white"
+                className="flex items-center gap-1 text-sm px-3 py-1 rounded-lg font-medium text-white shrink-0"
                 style={{ background: "var(--gradient-primary)", opacity: saving ? 0.6 : 1 }}>
-                <Save size={13}/> {saving ? "Сохраняю..." : "Сохранить"}
+                <Save size={13}/> {saving ? "..." : "Сохранить"}
               </button>
               <button onClick={() => setShowSaveForm(false)}
-                className="text-sm px-2 py-1 rounded-lg border"
+                className="text-sm px-2 py-1 rounded-lg border shrink-0"
                 style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}>
-                Отмена
+                ✕
               </button>
             </div>
           ) : (
             <button onClick={() => setShowSaveForm(true)}
-              className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80"
+              className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80 shrink-0"
               style={{ borderColor: "var(--brown-mid)", color: "var(--brown-mid)" }}>
-              <Save size={13}/> Сохранить конспект
+              <Save size={13}/> <span className="hidden sm:inline">Сохранить конспект</span><span className="sm:hidden">Сохранить</span>
             </button>
           )}
           <button onClick={() => setShowHistory(h => !h)}
-            className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80 ml-auto"
+            className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80 shrink-0"
             style={{ borderColor: showHistory ? "var(--brown-dark)" : "var(--brown-pale)",
-                     color: "var(--brown-dark)", background: showHistory ? "var(--brown-pale)" : "transparent" }}>
-            <BookOpen size={13}/> История {snapshots.length > 0 && `(${snapshots.length})`}
+                     color: "var(--brown-dark)", background: showHistory ? "var(--brown-pale)" : "transparent",
+                     marginLeft: "auto" }}>
+            <BookOpen size={13}/> <span className="hidden sm:inline">История {snapshots.length > 0 && `(${snapshots.length})`}</span>
+            <span className="sm:hidden">{snapshots.length > 0 ? snapshots.length : ""}</span>
             <ChevronRight size={12} style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
           </button>
         </>}
         {!(mode === "builtin") && (
-          <span className="ml-auto text-xs" style={{ color: "var(--brown-light)" }}>
+          <span className="hidden sm:inline ml-auto text-xs" style={{ color: "var(--brown-light)" }}>
             Ученик видит встроенную доску в своём кабинете
           </span>
         )}
@@ -200,27 +201,34 @@ export default function BoardView({
             </div>
             <SyncedAudio roomId={studentId} role="tutor" />
             <SyncedVideo roomId={studentId} role="tutor" />
-            <BoardAI canvasRef={canvasRef} getViewport={getViewport} />
           </div>
 
-          {/* History panel — desktop: side panel, mobile: full overlay */}
+          {/* History panel — mobile: fixed full-screen overlay, desktop: side panel */}
           {showHistory && (
-            <div className="flex flex-col shrink-0 overflow-hidden"
+            <div className="flex flex-col overflow-hidden fixed inset-0 z-50 sm:static sm:inset-auto sm:z-auto sm:shrink-0 sm:w-[280px]"
               style={{
                 borderLeft: "1px solid var(--brown-pale)",
                 background: "white",
-                width: "min(280px, 100%)",
               }}>
               <div className="px-4 py-3 border-b flex items-center justify-between shrink-0"
                 style={{ borderColor: "var(--brown-pale)" }}>
                 <span className="font-semibold text-sm" style={{ color: "var(--brown-dark)" }}>Конспекты</span>
-                {selected.size >= 2 && (
-                  <button onClick={handleMerge}
-                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium text-white"
-                    style={{ background: "var(--gradient-primary)" }}>
-                    <GitMerge size={12}/> Объединить ({selected.size})
+                <div className="flex items-center gap-2">
+                  {selected.size >= 2 && (
+                    <button onClick={handleMerge}
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium text-white"
+                      style={{ background: "var(--gradient-primary)" }}>
+                      <GitMerge size={12}/> Объединить ({selected.size})
+                    </button>
+                  )}
+                  {/* Close button — visible on mobile */}
+                  <button onClick={() => setShowHistory(false)}
+                    className="sm:hidden p-1.5 rounded-lg border"
+                    style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}
+                    aria-label="Закрыть">
+                    ✕
                   </button>
-                )}
+                </div>
               </div>
 
               {snapshots.length === 0 ? (
