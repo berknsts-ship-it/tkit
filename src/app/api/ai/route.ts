@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
+// Parse friendly retry message from Groq rate limit error
+function rateLimitMessage(msg: string): string {
+  const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
+  return m
+    ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек. и попробуйте снова.`
+    : "Слишком много запросов. Подождите немного и попробуйте снова.";
+}
+
 const systemPrompts: Record<string, string> = {
   reference: `Ты помощник репетитора. Выполняй точно то, о чём просят — не добавляй лишнего.
 Используй Markdown для форматирования:
@@ -39,7 +47,11 @@ export async function POST(req: NextRequest) {
   if (!prompt) return NextResponse.json({ error: "No prompt" }, { status: 400 });
 
   const system = systemPrompts[mode] ?? systemPrompts.reference;
-  const maxTokens = mode === "vocabulary_set" ? 1200 : mode === "reference" ? 1200 : 400;
+  // Short outputs (hints/examples) → fast 8b model with higher free TPM limit
+  const model = (mode === "vocabulary_example" || mode === "vocabulary_hint")
+    ? "llama-3.1-8b-instant"
+    : "llama-3.3-70b-versatile";
+  const maxTokens = mode === "vocabulary_set" ? 1000 : mode === "reference" ? 1000 : 400;
 
   const res = await fetch(GROQ_API, {
     method: "POST",
@@ -48,7 +60,7 @@ export async function POST(req: NextRequest) {
       Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model,
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -59,8 +71,9 @@ export async function POST(req: NextRequest) {
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: err }, { status: res.status });
+    const err = await res.json().catch(() => ({ error: { message: "" } }));
+    const msg = (err?.error?.message as string) ?? "";
+    return NextResponse.json({ error: rateLimitMessage(msg) }, { status: res.status });
   }
 
   const data = await res.json();

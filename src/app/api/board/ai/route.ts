@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
+function rateLimitMessage(msg: string): string {
+  const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
+  return m
+    ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек. и попробуйте снова.`
+    : "Слишком много запросов. Подождите немного и попробуйте снова.";
+}
+
 const SYSTEM = `Ты помощник репетитора любого предмета. Создаёшь ИНТЕРАКТИВНЫЕ задания для доски — ученик перетаскивает карточки мышкой.
 
 ═══ ТИПЫ ЭЛЕМЕНТОВ ═══
@@ -134,14 +141,15 @@ ${existingCount === 0
         { role: "system", content: SYSTEM },
         { role: "user", content: userMessage },
       ],
-      max_tokens: 4000,
+      max_tokens: 2500,
       temperature: 0.5,
     }),
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: err }, { status: res.status });
+    const err = await res.json().catch(() => ({ error: { message: "" } }));
+    const msg = (err?.error?.message as string) ?? "";
+    return NextResponse.json({ error: rateLimitMessage(msg) }, { status: res.status });
   }
 
   const data = await res.json();

@@ -73,8 +73,13 @@ export async function POST(req: NextRequest) {
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: err }, { status: res.status });
+    const err = await res.json().catch(() => ({ error: { message: "" } }));
+    const msg = (err?.error?.message as string) ?? "";
+    const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
+    const friendly = m
+      ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек.`
+      : "Слишком много запросов. Попробуйте позже.";
+    return NextResponse.json({ error: friendly }, { status: res.status });
   }
 
   const data = await res.json();
