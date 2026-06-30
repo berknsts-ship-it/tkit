@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import { createArticle, updateArticle } from "@/app/actions/reference";
 import { useRouter } from "next/navigation";
-import { Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, ChevronDown, ChevronUp, ImagePlus, X } from "lucide-react";
 import MarkdownContent from "@/components/shared/MarkdownContent";
 
 interface Student { id: string; name: string; }
@@ -37,20 +37,51 @@ export default function ReferenceEditor({ students, article }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(article?.assigned_student_ids ?? []));
   const [aiPrompt, setAiPrompt]     = useState("");
   const [aiLoading, setAiLoading]   = useState(false);
+  const [aiError, setAiError]       = useState<string | null>(null);
   const [preview, setPreview]       = useState(false);
+  const [imageFile, setImageFile]   = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function pickImage(file: File) {
+    setImageFile(file);
+    const url = URL.createObjectURL(file);
+    setImagePreview(url);
+  }
+
+  function clearImage() {
+    setImageFile(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   async function generateWithAI() {
     const prompt = aiPrompt.trim() || title.trim();
-    if (!prompt) { alert("Введите заголовок или запрос к ИИ"); return; }
     setAiLoading(true);
-    const res = await fetch("/api/ai", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, mode: "reference" }),
-    });
-    const data = await res.json();
-    if (data.text) setContent(data.text);
-    setAiLoading(false);
+    setAiError(null);
+    try {
+      let data: { text?: string; error?: string };
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append("image", imageFile);
+        if (prompt) fd.append("prompt", prompt);
+        const res = await fetch("/api/ai/reference-image", { method: "POST", body: fd });
+        data = await res.json();
+      } else {
+        if (!prompt) { setAiError("Введите заголовок или запрос к ИИ"); return; }
+        const res = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, mode: "reference" }),
+        });
+        data = await res.json();
+      }
+      if (data.text) setContent(data.text);
+      else setAiError(data.error ?? "Ошибка ИИ");
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   function toggleStudent(id: string) {
@@ -101,28 +132,69 @@ export default function ReferenceEditor({ students, article }: Props) {
           <span className="text-sm font-medium" style={{ color: "var(--brown-dark)" }}>Помощник ИИ</span>
         </div>
 
+        {/* Загрузка скрина */}
+        <div>
+          {imagePreview ? (
+            <div className="relative inline-block">
+              <img src={imagePreview} alt="скрин" className="rounded-xl border max-h-48 object-contain"
+                style={{ borderColor: "var(--brown-pale)" }}/>
+              <button type="button" onClick={clearImage}
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow-sm"
+                style={{ background: "white", color: "var(--brown-dark)", border: "1px solid var(--brown-pale)" }}>
+                <X size={12}/>
+              </button>
+            </div>
+          ) : (
+            <label
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer hover:opacity-80 transition-all w-fit text-sm"
+              style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "white" }}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith("image/")) pickImage(f); }}>
+              <ImagePlus size={15}/>
+              Загрузить скриншот
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) pickImage(f); }}/>
+            </label>
+          )}
+          {imageFile && (
+            <p className="text-xs mt-1.5" style={{ color: "var(--brown-light)" }}>
+              ИИ прочитает текст со скрина и выполнит твой запрос ниже
+            </p>
+          )}
+        </div>
+
         <textarea value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
           rows={2}
-          placeholder={"Что написать? Например:\n«Сделай таблицу сравнения Past Simple и Past Continuous с примерами»"}
+          placeholder={imageFile
+            ? "Что сделать со скрином? Например: «Перепиши как шпаргалку», «Сделай таблицу», «Переведи на русский»"
+            : "Что написать? Например:\n«Сделай таблицу сравнения Past Simple и Past Continuous с примерами»"}
           className="w-full px-3 py-2.5 rounded-xl border outline-none resize-none text-sm"
           style={{ borderColor: "var(--brown-pale)", background: "white", color: "var(--brown-dark)", lineHeight: 1.6 }}/>
 
-        {/* Подсказки */}
-        <div className="flex flex-wrap gap-1.5">
-          {AI_SUGGESTIONS.map(s => (
-            <button key={s} type="button" onClick={() => setAiPrompt(s)}
-              className="text-xs px-2.5 py-1 rounded-full border hover:opacity-80 transition-all text-left"
-              style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "white" }}>
-              {s.length > 50 ? s.slice(0, 50) + "…" : s}
-            </button>
-          ))}
-        </div>
+        {/* Подсказки (только без скрина) */}
+        {!imageFile && (
+          <div className="flex flex-wrap gap-1.5">
+            {AI_SUGGESTIONS.map(s => (
+              <button key={s} type="button" onClick={() => setAiPrompt(s)}
+                className="text-xs px-2.5 py-1 rounded-full border hover:opacity-80 transition-all text-left"
+                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "white" }}>
+                {s.length > 50 ? s.slice(0, 50) + "…" : s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {aiError && (
+          <p className="text-xs px-3 py-2 rounded-xl" style={{ background: "#fff0f0", color: "#c0392b" }}>
+            {aiError}
+          </p>
+        )}
 
         <button type="button" onClick={generateWithAI} disabled={aiLoading}
           className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl font-medium transition-all hover:opacity-80"
           style={{ background: "var(--gradient-primary)", color: "white", opacity: aiLoading ? 0.7 : 1 }}>
           <Sparkles size={14}/>
-          {aiLoading ? "Генерирую..." : "Сгенерировать"}
+          {aiLoading ? (imageFile ? "Читаю скрин..." : "Генерирую...") : (imageFile ? "Обработать скрин" : "Сгенерировать")}
         </button>
       </div>
 
