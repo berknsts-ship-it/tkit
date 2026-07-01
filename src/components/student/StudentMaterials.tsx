@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Download } from "lucide-react";
 import dynamic from "next/dynamic";
 const FlvPlayer = dynamic(() => import("@/components/shared/FlvPlayer"), { ssr: false });
+const PdfReader = dynamic(() => import("@/components/student/PdfReader").then(m => ({ default: m.PdfReader })), { ssr: false });
 
 interface Material {
   id: string;
@@ -74,12 +75,9 @@ export default function StudentMaterials({ materials }: { materials: Material[] 
               {isOpen && m.file_url && (
                 <div className="border-t" style={{ borderColor: "var(--brown-pale)" }}>
                   {type === "pdf" && (
-                    <iframe
-                      src={m.file_url!}
-                      className="w-full"
-                      style={{ height: "75vh", display: "block" }}
-                      title={m.title}
-                    />
+                    <div className="p-3">
+                      <PdfReader url={m.file_url!} title={m.title} />
+                    </div>
                   )}
 
                   {type === "image" && (
