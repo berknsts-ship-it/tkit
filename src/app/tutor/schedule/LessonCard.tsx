@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { updateLessonStatus, rescheduleLesson, togglePaymentStatus, updateLesson } from "@/app/actions/lessons";
-import { ChevronDown, Pencil } from "lucide-react";
+import { updateLessonStatus, rescheduleLesson, togglePaymentStatus, updateLesson, deleteLesson } from "@/app/actions/lessons";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 type Status = "scheduled" | "completed" | "cancelled" | "rescheduled" | "missed";
 type PayStatus = "paid" | "unpaid";
@@ -139,13 +139,23 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
           )}
         </div>
 
-        {/* Кнопка редактирования */}
+        {/* Редактировать / Удалить */}
         <button
           onClick={() => setEditMode(m => !m)}
           title="Редактировать"
           className="shrink-0 p-1.5 rounded-lg border hover:opacity-70 transition-all"
           style={{ borderColor: editMode ? "var(--brown-dark)" : "var(--brown-pale)", color: "var(--brown-mid)" }}>
           <Pencil size={13}/>
+        </button>
+        <button
+          onClick={async () => {
+            if (!window.confirm("Удалить урок?")) return;
+            await deleteLesson(lesson.id);
+          }}
+          title="Удалить"
+          className="shrink-0 p-1.5 rounded-lg border hover:opacity-70 transition-all"
+          style={{ borderColor: "var(--brown-pale)", color: "#e05030" }}>
+          <Trash2 size={13}/>
         </button>
 
         {/* Оплата */}

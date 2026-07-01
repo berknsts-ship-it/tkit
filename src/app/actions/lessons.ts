@@ -49,6 +49,15 @@ export async function updateLesson(id: string, fields: {
   revalidatePath("/tutor/students");
 }
 
+export async function deleteLesson(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("lessons").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tutor/schedule");
+  revalidatePath("/tutor/students");
+  revalidatePath("/tutor/dashboard");
+}
+
 export async function togglePaymentStatus(id: string, current: "paid" | "unpaid") {
   const supabase = await createClient();
   const { error } = await supabase.from("lessons")
