@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { updateLessonStatus, rescheduleLesson, togglePaymentStatus } from "@/app/actions/lessons";
-import { ChevronDown } from "lucide-react";
+import { updateLessonStatus, rescheduleLesson, togglePaymentStatus, updateLesson } from "@/app/actions/lessons";
+import { ChevronDown, Pencil } from "lucide-react";
 
 type Status = "scheduled" | "completed" | "cancelled" | "rescheduled" | "missed";
 type PayStatus = "paid" | "unpaid";
@@ -35,26 +35,34 @@ interface Lesson {
 }
 
 export default function LessonCard({ lesson }: { lesson: Lesson }) {
-  const [open,           setOpen]           = useState(false);
-  const [status,         setStatus]         = useState<Status>(lesson.status);
-  const [payStatus,      setPayStatus]      = useState<PayStatus>(lesson.payment_status ?? "unpaid");
-  const [loading,        setLoading]        = useState(false);
-  const [payLoading,     setPayLoading]     = useState(false);
-  const [rescheduleMode, setRescheduleMode] = useState(false);
-  const [newDate,        setNewDate]        = useState("");
-  const [newTime,        setNewTime]        = useState("");
-  const [confirmPay,     setConfirmPay]     = useState(false);
+  const [open,        setOpen]       = useState(false);
+  const [status,      setStatus]     = useState<Status>(lesson.status);
+  const [payStatus,   setPayStatus]  = useState<PayStatus>(lesson.payment_status ?? "unpaid");
+  const [loading,     setLoading]    = useState(false);
+  const [payLoading,  setPayLoading] = useState(false);
+  const [confirmPay,  setConfirmPay] = useState(false);
+  const [editMode,    setEditMode]   = useState(false);
 
-  const cfg   = STATUS_CONFIG[status] ?? STATUS_CONFIG.scheduled;
-  const dt    = new Date(lesson.scheduled_at);
-  const isPast = status !== "scheduled";
+  // edit form state — initialised from current lesson values
+  const initDt = new Date(lesson.scheduled_at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const initDate = `${initDt.getFullYear()}-${pad(initDt.getMonth()+1)}-${pad(initDt.getDate())}`;
+  const initTime = `${pad(initDt.getHours())}:${pad(initDt.getMinutes())}`;
+
+  const [editDate,     setEditDate]     = useState(initDate);
+  const [editTime,     setEditTime]     = useState(initTime);
+  const [editDuration, setEditDuration] = useState(String(lesson.duration_min ?? 60));
+  const [editPrice,    setEditPrice]    = useState(lesson.price_rub ? String(lesson.price_rub) : "");
+  const [editNotes,    setEditNotes]    = useState(lesson.notes ?? "");
+  const [editLoading,  setEditLoading]  = useState(false);
+
+  const cfg  = STATUS_CONFIG[status] ?? STATUS_CONFIG.scheduled;
+  const dt   = new Date(lesson.scheduled_at);
   const isCancelled = status === "cancelled";
-
   const DESTRUCTIVE: Status[] = ["cancelled", "missed"];
 
   const changeStatus = async (s: Status) => {
     setOpen(false);
-    if (s === "rescheduled") { setRescheduleMode(true); return; }
     if (DESTRUCTIVE.includes(s) && !window.confirm(
       s === "cancelled" ? "Отменить урок?" : "Отметить как сгоревший?"
     )) return;
@@ -64,20 +72,8 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
     setLoading(false);
   };
 
-  const submitReschedule = async () => {
-    if (!newDate || !newTime) return;
-    setLoading(true);
-    setRescheduleMode(false);
-    await rescheduleLesson(lesson.id, `${newDate}T${newTime}:00`);
-    setStatus("scheduled");
-    setLoading(false);
-  };
-
   const handleTogglePay = async () => {
-    if (payStatus === "paid") {
-      setConfirmPay(true);
-      return;
-    }
+    if (payStatus === "paid") { setConfirmPay(true); return; }
     setPayLoading(true);
     await togglePaymentStatus(lesson.id, payStatus);
     setPayStatus("paid");
@@ -92,9 +88,24 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
     setPayLoading(false);
   };
 
+  const submitEdit = async () => {
+    if (!editDate || !editTime) return;
+    setEditLoading(true);
+    await updateLesson(lesson.id, {
+      scheduled_at: new Date(`${editDate}T${editTime}:00`).toISOString(),
+      duration_min: parseInt(editDuration) || 60,
+      price_rub:    editPrice ? parseInt(editPrice) : null,
+      notes:        editNotes.trim() || null,
+    });
+    setEditLoading(false);
+    setEditMode(false);
+  };
+
+  const inputStyle = { borderColor: "var(--brown-pale)", background: "#fdf8f0", color: "var(--brown-dark)" };
+
   return (
     <div className="rounded-xl border overflow-visible"
-      style={{ background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)", opacity: isPast ? 0.78 : 1 }}>
+      style={{ background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)", opacity: status !== "scheduled" ? 0.78 : 1 }}>
       <div className="flex items-center gap-3 p-4">
         {/* Дата */}
         <div className="text-center min-w-[48px] shrink-0">
@@ -127,6 +138,15 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
             </div>
           )}
         </div>
+
+        {/* Кнопка редактирования */}
+        <button
+          onClick={() => setEditMode(m => !m)}
+          title="Редактировать"
+          className="shrink-0 p-1.5 rounded-lg border hover:opacity-70 transition-all"
+          style={{ borderColor: editMode ? "var(--brown-dark)" : "var(--brown-pale)", color: "var(--brown-mid)" }}>
+          <Pencil size={13}/>
+        </button>
 
         {/* Оплата */}
         {!isCancelled && !confirmPay && (
@@ -183,26 +203,55 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
         </div>
       )}
 
-      {/* Форма переноса */}
-      {rescheduleMode && (
-        <div className="flex items-center gap-2 px-4 pb-4 flex-wrap">
-          <span className="text-sm" style={{ color: "var(--brown-mid)" }}>Новая дата:</span>
-          <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border outline-none text-sm"
-            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)" }} />
-          <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border outline-none text-sm"
-            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)" }} />
-          <button onClick={submitReschedule} disabled={!newDate || !newTime}
-            className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
-            style={{ background: "var(--gradient-primary)" }}>
-            Сохранить
-          </button>
-          <button onClick={() => setRescheduleMode(false)}
-            className="px-3 py-1.5 rounded-lg text-sm border"
-            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
-            Отмена
-          </button>
+      {/* Инлайн-форма редактирования */}
+      {editMode && (
+        <div className="border-t px-4 pb-4 pt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+          style={{ borderColor: "var(--brown-pale)", background: "#fdf8f0" }}>
+          <div className="col-span-2 sm:col-span-2">
+            <label className="text-xs mb-1 block" style={{ color: "var(--brown-light)" }}>Дата</label>
+            <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
+          </div>
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: "var(--brown-light)" }}>Время</label>
+            <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
+          </div>
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: "var(--brown-light)" }}>Длительность, мин</label>
+            <select value={editDuration} onChange={e => setEditDuration(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}>
+              <option value="30">30</option>
+              <option value="45">45</option>
+              <option value="60">60</option>
+              <option value="90">90</option>
+              <option value="120">120</option>
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs mb-1 block" style={{ color: "var(--brown-light)" }}>Цена, ₽</label>
+            <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)}
+              placeholder="Без изменений" min="0" step="50"
+              className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs mb-1 block" style={{ color: "var(--brown-light)" }}>Заметки</label>
+            <input type="text" value={editNotes} onChange={e => setEditNotes(e.target.value)}
+              placeholder="Тема, домашнее задание..."
+              className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
+          </div>
+          <div className="col-span-2 sm:col-span-4 flex gap-2">
+            <button onClick={submitEdit} disabled={editLoading}
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: "var(--gradient-primary)" }}>
+              {editLoading ? "Сохраняем..." : "Сохранить"}
+            </button>
+            <button onClick={() => setEditMode(false)}
+              className="px-4 py-2 rounded-xl border text-sm"
+              style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
+              Отмена
+            </button>
+          </div>
         </div>
       )}
     </div>

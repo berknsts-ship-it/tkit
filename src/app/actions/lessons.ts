@@ -36,6 +36,19 @@ export async function rescheduleLesson(id: string, scheduledAt: string) {
   revalidatePath("/tutor/schedule");
 }
 
+export async function updateLesson(id: string, fields: {
+  scheduled_at?: string;
+  duration_min?: number;
+  price_rub?: number | null;
+  notes?: string | null;
+}) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("lessons").update(fields).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tutor/schedule");
+  revalidatePath("/tutor/students");
+}
+
 export async function togglePaymentStatus(id: string, current: "paid" | "unpaid") {
   const supabase = await createClient();
   const { error } = await supabase.from("lessons")
