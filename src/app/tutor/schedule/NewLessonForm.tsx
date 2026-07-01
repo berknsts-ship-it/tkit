@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 interface Student { id: string; name: string; default_price_rub?: number | null; }
+interface Subscription { id: string; student_id: string; balance: number; name: string; }
 
-export default function NewLessonForm({ students }: { students: Student[] }) {
+export default function NewLessonForm({ students, subscriptions = [] }: { students: Student[]; subscriptions?: Subscription[] }) {
   const [studentId, setStudentId] = useState("");
   const [date,      setDate]      = useState("");
   const [time,      setTime]      = useState("");
@@ -16,6 +17,8 @@ export default function NewLessonForm({ students }: { students: Student[] }) {
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
   const router = useRouter();
+
+  const activeSub = subscriptions.find(s => s.student_id === studentId) ?? null;
 
   const handleStudentChange = (id: string) => {
     setStudentId(id);
@@ -34,12 +37,13 @@ export default function NewLessonForm({ students }: { students: Student[] }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Не авторизован"); setLoading(false); return; }
     const { error: err } = await supabase.from("lessons").insert({
-      tutor_id:   user.id,
-      student_id: studentId,
-      scheduled_at: new Date(`${date}T${time}:00`).toISOString(),
-      duration_min: parseInt(duration) || 60,
-      price_rub:  price ? parseInt(price) : null,
-      notes:      notes || null,
+      tutor_id:        user.id,
+      student_id:      studentId,
+      scheduled_at:    new Date(`${date}T${time}:00`).toISOString(),
+      duration_min:    parseInt(duration) || 60,
+      price_rub:       price ? parseInt(price) : null,
+      notes:           notes || null,
+      subscription_id: activeSub?.id ?? null,
     });
     setLoading(false);
     if (err) { setError(err.message); return; }
@@ -78,6 +82,12 @@ export default function NewLessonForm({ students }: { students: Student[] }) {
         style={{ background: "var(--gradient-primary)", opacity: loading ? 0.7 : 1 }}>
         {loading ? "..." : "Добавить"}
       </button>
+      {activeSub && (
+        <p className="col-span-4 text-xs px-3 py-2 rounded-lg"
+          style={{ background: "#f0fdf4", color: "#1a7a3a", border: "1px solid #b0e8c0" }}>
+          Абонемент «{activeSub.name}» · остаток {activeSub.balance.toLocaleString("ru")} ₽ — урок спишется автоматически
+        </p>
+      )}
       {error && <p className="col-span-4 text-sm text-red-600">{error}</p>}
     </form>
   );

@@ -14,19 +14,28 @@ export default async function StudentsPage() {
   const tutorId = await getEffectiveTutorId(user);
   const db = createAdminClient();
 
-  const [{ data: students }, { data: lessons }] = await Promise.all([
+  const [{ data: students }, { data: lessons }, { data: subscriptions }] = await Promise.all([
     db.from("students").select("*").eq("tutor_id", tutorId).order("name"),
     db.from("lessons")
-      .select("student_id, payment_status, price_rub, status")
+      .select("student_id, payment_status, price_rub, status, subscription_id")
       .eq("tutor_id", tutorId)
       .neq("status", "cancelled"),
+    db.from("subscriptions").select("student_id, balance, total_amount, name, status").eq("tutor_id", tutorId),
   ]);
 
-  // Compute balance per student (sum of price_rub for unpaid lessons)
+  // Долг по поурочным урокам (без абонемента)
   const debtMap: Record<string, number> = {};
   for (const l of lessons ?? []) {
-    if (l.payment_status === "unpaid" && l.price_rub) {
+    if (l.payment_status === "unpaid" && l.price_rub && !l.subscription_id) {
       debtMap[l.student_id] = (debtMap[l.student_id] ?? 0) + l.price_rub;
+    }
+  }
+
+  // Активные абонементы
+  const subMap: Record<string, { balance: number; total: number; name: string }> = {};
+  for (const s of subscriptions ?? []) {
+    if (s.status === "active") {
+      subMap[s.student_id] = { balance: s.balance, total: s.total_amount, name: s.name };
     }
   }
 
@@ -65,6 +74,7 @@ export default async function StudentsPage() {
         <div className="space-y-3">
           {students.map(s => {
             const debt = debtMap[s.id] ?? 0;
+            const sub  = subMap[s.id] ?? null;
             return (
               <div key={s.id} className="rounded-xl border p-4 flex items-center gap-4" style={card}>
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0"
@@ -72,25 +82,32 @@ export default async function StudentsPage() {
                   {s.name[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium">{s.name}</div>
+                  <Link href={`/tutor/students/${s.id}`} className="font-medium hover:underline" style={{ color: "var(--brown-dark)" }}>
+                    {s.name}
+                  </Link>
                   <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                     {s.notes && <span className="text-sm truncate" style={{ color: "var(--brown-mid)" }}>{s.notes}</span>}
-                    {s.default_price_rub && (
+                    {sub ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={{ background: sub.balance < sub.total * 0.25 ? "#fff0f0" : "#f0fdf4",
+                                 color: sub.balance < sub.total * 0.25 ? "#c0392b" : "#1a7a3a" }}>
+                        Абонемент: {sub.balance.toLocaleString("ru")} ₽
+                      </span>
+                    ) : s.default_price_rub ? (
                       <span className="text-xs" style={{ color: "var(--brown-light)" }}>
                         {s.default_price_rub} ₽/занятие
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
-                {/* Долг */}
-                {debt > 0 && (
+                {/* Долг (только для поурочных) */}
+                {!sub && debt > 0 && (
                   <div className="shrink-0 text-sm font-semibold px-3 py-1 rounded-lg"
                     style={{ background: "#fff3e0", color: "#c07800", border: "1px solid #f0d090" }}>
                     Долг: {debt.toLocaleString("ru")} ₽
                   </div>
                 )}
-                {debt === 0 && Object.prototype.hasOwnProperty.call(debtMap, s.id) === false && null}
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <div className="text-sm font-mono px-3 py-1 rounded-lg" style={{
