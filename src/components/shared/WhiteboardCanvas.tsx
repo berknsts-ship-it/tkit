@@ -1814,6 +1814,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     const { cx, cy } = clientXY(e);
     const w = s2w(cx, cy);
     stopInertia();
+    // place pending symbol first (before tool checks, mirrors onMouseDown logic)
+    if (pendingSymbol) {
+      placeSymbol(pendingSymbol, w.x, w.y, pendingSymbol.length === 1 && pendingSymbol.codePointAt(0)! > 127 ? 48 : 32);
+      setPendingSymbol(null); setPendingSymbolPos(null); return;
+    }
     if (tool === "hand" || tool === "select") {
       const hit = tool === "select"
         ? [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y))
@@ -1831,11 +1836,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         flushSync(() => setTouchDragging(true));
       }
       return;
-    }
-    // touch: place pending emoji
-    if (pendingSymbol) {
-      placeSymbol(pendingSymbol, w.x, w.y, pendingSymbol.length === 1 && pendingSymbol.codePointAt(0)! > 127 ? 48 : 32);
-      setPendingSymbol(null); setPendingSymbolPos(null); return;
     }
     if (tool === "shape") {
       const sp = snapPt(w.x, w.y);
@@ -2702,11 +2702,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         <SideBtn active={showEmojiPicker} onClick={()=>{setShowShapeMenu(false);setShowFrameMenu(false);setShowEmojiPicker(v=>!v);}} title="Эмодзи">
           <span className="text-base leading-none">😊</span>
         </SideBtn>
-        {role === "tutor" && (
-          <SideBtn active={false} onClick={() => aiInputRef.current?.click()} title="AI-макет из скрина">
-            {aiLoading ? <span className="text-xs animate-spin">⟳</span> : <Sparkles size={16}/>}
-          </SideBtn>
-        )}
         <div className="flex-1"/>
         {/* More tools at bottom */}
         <div className="w-8 h-px mx-auto mb-1" style={{ background:"var(--brown-pale)" }}/>
@@ -2900,127 +2895,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             </div>
           </>)}
 
-          {/* Symbol picker (shown when activated from more-tools) */}
-          {showSymbols && (
-            <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-              style={{ background:"rgba(0,0,0,0.2)" }}
-              onTouchStart={e => e.stopPropagation()}
-              onClick={e=>{ if(e.target===e.currentTarget) setShowSymbols(false); }}>
-              <div className="rounded-2xl border shadow-xl overflow-hidden"
-                style={{ background:"white", borderColor:"var(--brown-pale)", width:340 }}>
-                <div className="flex border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)" }}>
-                  {Object.keys(SYMBOLS).map(tab => (
-                    <button key={tab} onClick={() => setSymTab(tab)}
-                      className="text-xs px-3 py-2 shrink-0 whitespace-nowrap"
-                      style={{ color: symTab===tab?"var(--brown-dark)":"var(--brown-light)",
-                               fontWeight: symTab===tab?600:400,
-                               borderBottom: symTab===tab?"2px solid var(--brown-dark)":"2px solid transparent" }}>
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-                <div className="p-2 grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
-                  {SYMBOLS[symTab].map(sym => (
-                    <button key={sym} onClick={() => { insertSymbol(sym); setShowSymbols(false); }}
-                      className="w-8 h-8 rounded-lg border hover:opacity-70 text-base flex items-center justify-center"
-                      style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
-                      {sym}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Dice panel */}
-          {showDice && (
-            <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-              style={{ background:"rgba(0,0,0,0.2)" }}
-              onTouchStart={e => e.stopPropagation()}
-              onClick={e=>{ if(e.target===e.currentTarget) setShowDice(false); }}>
-              <div className="rounded-2xl border shadow-xl p-4 w-56"
-                style={{ background:"white", borderColor:"var(--brown-pale)" }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-medium" style={{ color:"var(--brown-dark)" }}>Кубиков:</span>
-                  {[1,2,3,4,5,6].map(n => (
-                    <button key={n} onClick={() => setDiceCount(n)}
-                      className="w-7 h-7 rounded-lg border-2 text-xs font-bold transition-all"
-                      style={{ borderColor: diceCount===n?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity: diceCount===n?1:0.5 }}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2 mb-3">
-                  <button onClick={rollDice} disabled={diceRolling}
-                    className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-60"
-                    style={{ background:"var(--gradient-primary)" }}>
-                    {diceRolling ? "Бросаю..." : "Бросить!"}
-                  </button>
-                  {role === "tutor" && (
-                    <button onClick={() => { addDiceToBoard(diceCount); setShowDice(false); }}
-                      className="px-3 py-2 rounded-xl text-xs border-2 font-medium"
-                      style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}
-                      title="Добавить кубик на доску">
-                      + Доска
-                    </button>
-                  )}
-                </div>
-                {diceResult.length > 0 && (
-                  <div className="flex gap-1.5 justify-center flex-wrap">
-                    {diceResult.map((v, i) => (
-                      <span key={i} className="text-4xl leading-none select-none">{DICE_FACES[v-1]}</span>
-                    ))}
-                    {diceCount > 1 && (
-                      <div className="w-full text-center text-sm font-bold mt-1" style={{ color:"var(--brown-dark)" }}>
-                        Сумма: {diceResult.reduce((a,b)=>a+b,0)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Wheel panel */}
-          {showWheel && (
-            <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-              style={{ background:"rgba(0,0,0,0.2)" }}
-              onTouchStart={e => e.stopPropagation()}
-              onClick={e=>{ if(e.target===e.currentTarget) setShowWheel(false); }}>
-              <div className="rounded-2xl border shadow-xl p-4 w-72"
-                style={{ background:"white", borderColor:"var(--brown-pale)" }}>
-                <div className="flex justify-center mb-3">
-                  <canvas ref={wheelCanvasRef} width={220} height={220} className="rounded-xl"/>
-                </div>
-                {wheelResult && (
-                  <div className="text-center mb-3 px-3 py-2 rounded-xl font-bold text-sm"
-                    style={{ background:"var(--brown-pale)", color:"var(--brown-dark)" }}>
-                    🎉 {wheelResult}
-                  </div>
-                )}
-                <div className="flex gap-2 mb-3">
-                  <button onClick={spinWheel} disabled={wheelSpinning}
-                    className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-60"
-                    style={{ background:"var(--gradient-primary)" }}>
-                    {wheelSpinning ? "Крутится..." : "Крутить!"}
-                  </button>
-                  {role === "tutor" && (
-                    <button onClick={() => { addWheelToBoard(); setShowWheel(false); }}
-                      className="px-3 py-2 rounded-xl text-xs border-2 font-medium"
-                      style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}
-                      title="Добавить колесо на доску">
-                      + Доска
-                    </button>
-                  )}
-                </div>
-                <textarea value={wheelItems} onChange={e => { setWheelItems(e.target.value); setWheelResult(null); }}
-                  rows={4} placeholder="Вариант 1&#10;Вариант 2&#10;..."
-                  className="w-full px-3 py-2 rounded-xl border outline-none text-xs resize-none"
-                  style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}/>
-              </div>
-            </div>
-          )}
-
           {/* Right side: ruling + pdf + zoom + undo/redo + clear */}
           <div className="ml-auto flex items-center gap-1 shrink-0">
             <button onClick={undo} disabled={!canUndo} title="Ctrl+Z" className="p-1.5 rounded-lg border disabled:opacity-25" style={{ borderColor:"var(--brown-pale)" }}><Undo2 size={14} style={{ color:"var(--brown-dark)" }}/></button>
@@ -3160,6 +3034,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           setTextInput({ wx: w.x, wy: w.y }); setTextValue("");
           setTimeout(() => textRef.current?.focus(), 30);
         }}
+        onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onTouchCancel={() => {
@@ -3168,8 +3043,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           panning.current = false; eraserActiveRef.current = false;
         }}>
 
-        <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }}
-          onTouchStart={onTouchStart} />
+        <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }} />
 
         {/* Video overlays */}
         {itemsRef.current.filter(it => it.type === "video").map(it => {
@@ -4084,6 +3958,154 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           </div>
         )}
 
+        {/* Symbol picker */}
+        {showSymbols && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
+            style={{ background:"rgba(0,0,0,0.2)" }}
+            onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowSymbols(false); }}>
+            <div className="rounded-2xl border shadow-xl overflow-hidden"
+              style={{ background:"white", borderColor:"var(--brown-pale)", width:340 }}>
+              <div className="flex border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)" }}>
+                {Object.keys(SYMBOLS).map(tab => (
+                  <button key={tab} onClick={() => setSymTab(tab)}
+                    className="text-xs px-3 py-2 shrink-0 whitespace-nowrap"
+                    style={{ color: symTab===tab?"var(--brown-dark)":"var(--brown-light)",
+                             fontWeight: symTab===tab?600:400,
+                             borderBottom: symTab===tab?"2px solid var(--brown-dark)":"2px solid transparent" }}>
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <div className="p-2 grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                {SYMBOLS[symTab].map(sym => (
+                  <button key={sym} onClick={() => { insertSymbol(sym); setShowSymbols(false); }}
+                    className="w-8 h-8 rounded-lg border hover:opacity-70 text-base flex items-center justify-center"
+                    style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                    {sym}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dice panel */}
+        {showDice && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
+            style={{ background:"rgba(0,0,0,0.2)" }}
+            onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowDice(false); }}>
+            <div className="rounded-2xl border shadow-xl p-4 w-56"
+              style={{ background:"white", borderColor:"var(--brown-pale)" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-medium" style={{ color:"var(--brown-dark)" }}>Кубиков:</span>
+                {[1,2,3,4,5,6].map(n => (
+                  <button key={n} onClick={() => setDiceCount(n)}
+                    className="w-7 h-7 rounded-lg border-2 text-xs font-bold transition-all"
+                    style={{ borderColor: diceCount===n?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", opacity: diceCount===n?1:0.5 }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 mb-3">
+                <button onClick={rollDice} disabled={diceRolling}
+                  className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-60"
+                  style={{ background:"var(--gradient-primary)" }}>
+                  {diceRolling ? "Бросаю..." : "Бросить!"}
+                </button>
+                {role === "tutor" && (
+                  <button onClick={() => { addDiceToBoard(diceCount); setShowDice(false); }}
+                    className="px-3 py-2 rounded-xl text-xs border-2 font-medium"
+                    style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}
+                    title="Добавить кубик на доску">
+                    + Доска
+                  </button>
+                )}
+              </div>
+              {diceResult.length > 0 && (
+                <div className="flex gap-2 justify-center flex-wrap">
+                  {diceResult.map((v, i) => (
+                    <DiceFaceSvg key={i} value={v} size={48} rolling={diceRolling}/>
+                  ))}
+                  {diceCount > 1 && (
+                    <div className="w-full text-center text-sm font-bold mt-1" style={{ color:"var(--brown-dark)" }}>
+                      Сумма: {diceResult.reduce((a,b)=>a+b,0)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* f(x) panel — mobile sheet (desktop uses the absolute dropdown in context bar) */}
+        {showFnPanel && (
+          <div className="sm:hidden fixed inset-0 z-[250] flex items-end justify-center pb-4 px-4"
+            style={{ background:"rgba(0,0,0,0.2)" }}
+            onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowFnPanel(false); }}>
+            <div className="w-full max-w-sm rounded-2xl border shadow-xl p-4"
+              style={{ background:"white", borderColor:"var(--brown-pale)" }}>
+              <div className="text-sm font-semibold mb-1" style={{ color:"var(--brown-dark)" }}>График функции</div>
+              <div className="text-xs mb-3" style={{ color:"var(--brown-mid)" }}>График вставляется как объект на доску</div>
+              <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); addFunction(); setShowFnPanel(false); }}>
+                <span className="text-sm font-mono shrink-0" style={{ color:"var(--brown-mid)" }}>y =</span>
+                <input value={fnFormula} onChange={e => { setFnFormula(e.target.value); setFnError(false); }}
+                  placeholder="x², sin(x), 2x+1…" autoComplete="off" spellCheck={false} autoFocus
+                  className="text-sm font-mono px-3 py-2 rounded-xl border outline-none flex-1"
+                  style={{ borderColor: fnError ? "#e05050" : "var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                <button type="submit" disabled={!fnFormula.trim()}
+                  className="text-sm px-4 py-2 rounded-xl font-medium shrink-0 disabled:opacity-40"
+                  style={{ background:"var(--gradient-primary)", color:"white" }}>
+                  OK
+                </button>
+              </form>
+              {fnError && <div className="text-xs mt-2" style={{ color:"#e05050" }}>Неверная формула. Примеры: x^2, sin(x), 2*x+1</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Wheel panel */}
+        {showWheel && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
+            style={{ background:"rgba(0,0,0,0.2)" }}
+            onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowWheel(false); }}>
+            <div className="rounded-2xl border shadow-xl p-4 w-72"
+              style={{ background:"white", borderColor:"var(--brown-pale)" }}>
+              <div className="flex justify-center mb-3">
+                <canvas ref={wheelCanvasRef} width={220} height={220} className="rounded-xl"/>
+              </div>
+              {wheelResult && (
+                <div className="text-center mb-3 px-3 py-2 rounded-xl font-bold text-sm"
+                  style={{ background:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                  🎉 {wheelResult}
+                </div>
+              )}
+              <div className="flex gap-2 mb-3">
+                <button onClick={spinWheel} disabled={wheelSpinning}
+                  className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-60"
+                  style={{ background:"var(--gradient-primary)" }}>
+                  {wheelSpinning ? "Крутится..." : "Крутить!"}
+                </button>
+                {role === "tutor" && (
+                  <button onClick={() => { addWheelToBoard(); setShowWheel(false); }}
+                    className="px-3 py-2 rounded-xl text-xs border-2 font-medium"
+                    style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}
+                    title="Добавить колесо на доску">
+                    + Доска
+                  </button>
+                )}
+              </div>
+              <textarea value={wheelItems} onChange={e => { setWheelItems(e.target.value); setWheelResult(null); }}
+                rows={4} placeholder="Вариант 1&#10;Вариант 2&#10;..."
+                className="w-full px-3 py-2 rounded-xl border outline-none text-xs resize-none"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}/>
+            </div>
+          </div>
+        )}
+
         {/* Minimap — collapsed icon / expanded panel */}
         <div className="absolute bottom-3 right-3 z-[60] flex flex-col items-end gap-1.5">
           {/* Expanded panel */}
@@ -4214,6 +4236,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
               style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
               <span className="text-lg">🎡</span><span className="text-xs">Колесо</span>
+            </button>
+            <button onClick={()=>{setShowFnPanel(v=>!v);setShowMoreTools(false);}}
+              className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+              style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+              <span className="text-sm font-bold font-mono leading-none mb-0.5">f(x)</span><span className="text-xs">График</span>
             </button>
             {role==="tutor" && (
               <button onClick={()=>{setShowTablePicker(v=>!v);setShowMoreTools(false);}}
@@ -4487,6 +4514,28 @@ function SideBtn({ active, onClick, title, children }: { active?:boolean; onClic
   );
 }
 
+// ── DiceFaceSvg ───────────────────────────────────────────────────────────────
+const DICE_PIPS: Record<number, [number,number][]> = {
+  1: [[0.5, 0.5]],
+  2: [[0.75, 0.25], [0.25, 0.75]],
+  3: [[0.75, 0.25], [0.5, 0.5], [0.25, 0.75]],
+  4: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]],
+  5: [[0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]],
+  6: [[0.25, 0.25], [0.25, 0.5], [0.25, 0.75], [0.75, 0.25], [0.75, 0.5], [0.75, 0.75]],
+};
+function DiceFaceSvg({ value, size, rolling }: { value: number; size: number; rolling?: boolean }) {
+  const pips = DICE_PIPS[value] ?? DICE_PIPS[1];
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100"
+      style={{ filter: rolling ? "blur(2px)" : "none", transition:"filter 0.08s", flexShrink:0 }}>
+      <rect x={3} y={3} width={94} height={94} rx={18} ry={18} fill="white"/>
+      {pips.map(([cx, cy], i) => (
+        <circle key={i} cx={cx*100} cy={cy*100} r={9} fill="#3D0C15"/>
+      ))}
+    </svg>
+  );
+}
+
 // ── DiceOverlay ───────────────────────────────────────────────────────────────
 function DiceOverlay({ item, sp, sw, sh, selected, onRoll }:
   { item: DiceItem; sp:{x:number;y:number}; sw:number; sh:number; selected:boolean; onRoll:(r:number[])=>void }) {
@@ -4511,23 +4560,18 @@ function DiceOverlay({ item, sp, sw, sh, selected, onRoll }:
     }, 70);
   };
 
-  const FACES = ["⚀","⚁","⚂","⚃","⚄","⚅"];
-  const fs = Math.min(sw / (item.count * 1.5), sh * 0.45, 56);
+  const diceSize = Math.min(Math.floor((sw - 16) / item.count) - 4, Math.floor(sh * 0.55), 64);
 
   return (
-    <div className="absolute flex flex-col items-center justify-center rounded-xl select-none overflow-hidden"
+    <div className="absolute flex flex-col items-center justify-center rounded-2xl select-none"
       style={{ left:sp.x, top:sp.y, width:sw, height:sh, zIndex:20,
-        background:"white",
-        border:"2px solid var(--brown-pale)",
-        boxShadow:"0 4px 16px rgba(59,42,26,0.14)",
-        outline: selected ? "2px solid #4a80f0" : "none" }}
+        background:"#f8f0e4",
+        boxShadow: selected ? "0 0 0 2px #4a80f0, 0 4px 16px rgba(59,42,26,0.14)" : "0 4px 16px rgba(59,42,26,0.14)" }}
       onTouchStart={e => { touchRef.current = { y:e.touches[0].clientY, t:Date.now() }; e.stopPropagation(); }}
       onTouchEnd={e => { e.stopPropagation(); const dy=touchRef.current.y-e.changedTouches[0].clientY; if(Math.abs(dy)>35)roll(); }}>
-      <div className="flex gap-1 justify-center flex-wrap px-2 mb-1">
+      <div className="flex gap-2 justify-center flex-wrap px-2 mb-1">
         {display.map((v,i) => (
-          <span key={i} style={{ fontSize:fs, lineHeight:1, filter:rolling?"blur(2px)":"none", transition:"filter 0.08s" }}>
-            {FACES[v-1]}
-          </span>
+          <DiceFaceSvg key={i} value={v} size={diceSize} rolling={rolling}/>
         ))}
       </div>
       {item.count > 1 && !rolling && (
