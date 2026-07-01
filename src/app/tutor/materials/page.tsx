@@ -5,6 +5,7 @@ import { getEffectiveTutorId } from "@/lib/creatorMode";
 import { redirect } from "next/navigation";
 import { Upload, FileText, Trash2, BookOpen } from "lucide-react";
 import { deleteMaterial } from "@/app/actions/materials";
+import MaterialAssignPanel from "./MaterialAssignPanel";
 
 export default async function MaterialsPage() {
   const supabase = await createClient();
@@ -12,11 +13,21 @@ export default async function MaterialsPage() {
   if (!user) redirect("/auth/login");
   const tutorId = await getEffectiveTutorId(user);
 
-  const { data: materials } = await createAdminClient()
-    .from("materials")
-    .select("*, students(name)")
-    .eq("tutor_id", tutorId)
-    .order("created_at", { ascending: false });
+  const admin = createAdminClient();
+
+  const [
+    { data: materials },
+    { data: students },
+  ] = await Promise.all([
+    admin.from("materials")
+      .select("*, material_assignments(student_id)")
+      .eq("tutor_id", tutorId)
+      .order("created_at", { ascending: false }),
+    admin.from("students")
+      .select("id, name")
+      .eq("tutor_id", tutorId)
+      .order("name"),
+  ]);
 
   const cardStyle = {
     background: "rgba(253, 248, 240, 0.95)",
@@ -32,6 +43,8 @@ export default async function MaterialsPage() {
     if (["ppt", "pptx"].includes(ext ?? "")) return "📊";
     return "📎";
   }
+
+  const allStudents = students ?? [];
 
   return (
     <div>
@@ -52,7 +65,7 @@ export default async function MaterialsPage() {
           <FileText size={40} className="mx-auto mb-3" style={{ color: "var(--brown-pale)" }} />
           <p className="font-medium" style={{ color: "var(--brown-mid)" }}>Материалов пока нет</p>
           <p className="text-sm mt-1" style={{ color: "var(--brown-light)" }}>
-            Загрузите учебники, PDF или другие файлы для учеников
+            Загрузите учебники, PDF или другие файлы — потом назначите нужным ученикам
           </p>
           <Link
             href="/tutor/materials/new"
@@ -64,42 +77,72 @@ export default async function MaterialsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {materials.map(m => (
-            <div key={m.id} className="rounded-xl border p-4 flex items-center gap-4" style={cardStyle}>
-              <span className="text-2xl">{getFileIcon(m.file_name)}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{m.title}</div>
-                <div className="text-xs mt-0.5" style={{ color: "var(--brown-light)" }}>
-                  {m.file_name}
-                  {" · "}
-                  {m.students ? `Для: ${(m.students as { name: string }).name}` : "Для всех учеников"}
+          {materials.map(m => {
+            const assignedIds: string[] = (m.material_assignments as { student_id: string }[] | null)
+              ?.map(a => a.student_id) ?? [];
+            const assignedNames = assignedIds
+              .map(id => allStudents.find(s => s.id === id)?.name)
+              .filter(Boolean);
+
+            return (
+              <div key={m.id} className="rounded-xl border p-4" style={cardStyle}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl shrink-0">{getFileIcon(m.file_name)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate" style={{ color: "var(--brown-dark)" }}>
+                      {m.title}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {assignedNames.length === 0 ? (
+                        <span className="text-xs" style={{ color: "var(--brown-light)" }}>
+                          Никому не назначен
+                        </span>
+                      ) : (
+                        assignedNames.map((name, i) => (
+                          <span
+                            key={i}
+                            className="text-xs px-2 py-0.5 rounded-full"
+                            style={{ background: "#e8f0ff", color: "#2060d0" }}
+                          >
+                            {name}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {m.file_url && (
+                      <Link
+                        href={`/tutor/materials/view?url=${encodeURIComponent(m.file_url)}&name=${encodeURIComponent(m.title)}`}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:opacity-80"
+                        style={{ background: "var(--brown-pale)", color: "var(--brown-dark)" }}
+                        title="Читать"
+                      >
+                        <BookOpen size={15} />
+                        Читать
+                      </Link>
+                    )}
+                    <MaterialAssignPanel
+                      materialId={m.id}
+                      allStudents={allStudents}
+                      assignedIds={assignedIds}
+                    />
+                    <form action={async () => { "use server"; await deleteMaterial(m.id); }}>
+                      <button
+                        type="submit"
+                        className="p-2 rounded-lg border transition-all hover:opacity-70"
+                        style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}
+                        title="Удалить"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {m.file_url && (
-                  <Link
-                    href={`/tutor/materials/view?url=${encodeURIComponent(m.file_url)}&name=${encodeURIComponent(m.title)}`}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:opacity-80"
-                    style={{ background: "var(--brown-pale)", color: "var(--brown-dark)" }}
-                    title="Читать"
-                  >
-                    <BookOpen size={15} />
-                    Читать
-                  </Link>
-                )}
-                <form action={async () => { "use server"; await deleteMaterial(m.id); }}>
-                  <button
-                    type="submit"
-                    className="p-2 rounded-lg border transition-all hover:opacity-70"
-                    style={{ borderColor: "var(--brown-pale)", color: "var(--brown-light)" }}
-                    title="Удалить"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </form>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

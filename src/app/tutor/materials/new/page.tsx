@@ -113,22 +113,9 @@ export default function NewMaterialPage() {
             )}
           </div>
 
-          {/* Назначить ученику */}
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
-              Назначить
-            </label>
-            <select
-              name="student_id"
-              className="w-full px-4 py-2 rounded-xl border outline-none"
-              style={{ borderColor: "var(--brown-pale)", background: "var(--cream)" }}
-            >
-              <option value="">Всем моим ученикам</option>
-              {studentsLoaded && students.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+          <p className="text-xs" style={{ color: "var(--brown-light)" }}>
+            После загрузки назначь нужным ученикам через кнопку «Назначить» в библиотеке.
+          </p>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

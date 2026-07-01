@@ -21,7 +21,8 @@ export default async function StudentPage({ params }: Props) {
   const [
     { data: lessons },
     { data: homework },
-    { data: materials },
+    { data: directMaterials },
+    { data: assignedRows },
     { data: allArticles },
     { data: snapshots },
     { data: topicsRaw },
@@ -34,6 +35,8 @@ export default async function StudentPage({ params }: Props) {
       .eq("tutor_id", student.tutor_id)
       .or(`student_id.eq.${student.id},student_id.is.null`)
       .order("created_at", { ascending: false }),
+    supabase.from("material_assignments").select("material_id")
+      .eq("student_id", student.id),
     supabase.from("reference_articles")
       .select("id, title, content, assign_to_all, reference_article_students(student_id)")
       .eq("tutor_id", student.tutor_id)
@@ -51,6 +54,19 @@ export default async function StudentPage({ params }: Props) {
   const { data: tutor } = await supabase
     .from("tutors").select("subject").eq("id", student.tutor_id).single();
 
+  // Merge direct + junction-table assigned materials (dedup by id)
+  const directIds = new Set((directMaterials ?? []).map(m => m.id));
+  const junctionIds = (assignedRows ?? []).map(r => r.material_id).filter(id => !directIds.has(id));
+  let junctionMaterials: typeof directMaterials = [];
+  if (junctionIds.length > 0) {
+    const { data } = await supabase.from("materials").select("*").in("id", junctionIds);
+    junctionMaterials = data ?? [];
+  }
+  const materials = [
+    ...(directMaterials ?? []),
+    ...junctionMaterials,
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
   const articles = (allArticles ?? []).filter(a =>
     a.assign_to_all ||
     a.reference_article_students.some((r: { student_id: string }) => r.student_id === student.id)
@@ -63,7 +79,7 @@ export default async function StudentPage({ params }: Props) {
       subject={tutor?.subject ?? null}
       lessons={lessons ?? []}
       homework={homework ?? []}
-      materials={materials ?? []}
+      materials={materials}
       articles={articles.map(a => ({ id: a.id, title: a.title, content: a.content }))}
       snapshots={snapshots ?? []}
       topics={(topicsRaw ?? []).map(t => ({

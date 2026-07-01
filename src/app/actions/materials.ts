@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 
 export async function uploadMaterial(formData: FormData) {
   const supabaseServer = await createClient();
@@ -10,7 +11,6 @@ export async function uploadMaterial(formData: FormData) {
 
   const file = formData.get("file") as File | null;
   const title = (formData.get("title") as string)?.trim();
-  const studentId = (formData.get("student_id") as string) || null;
 
   if (!title) return { error: "Укажите название" };
   if (!file || file.size === 0) return { error: "Выберите файл" };
@@ -30,15 +30,46 @@ export async function uploadMaterial(formData: FormData) {
     .from("materials")
     .getPublicUrl(storagePath);
 
-  const { error: dbError } = await admin.from("materials").insert({
+  const { data: mat, error: dbError } = await admin.from("materials").insert({
     tutor_id: user.id,
-    student_id: studentId,
+    student_id: null,
     title,
     file_url: publicUrl,
     file_name: file.name,
-  });
+  }).select("id").single();
 
   if (dbError) return { error: "Ошибка сохранения: " + dbError.message };
+
+  // Pre-assign to students if provided
+  const studentIds = formData.getAll("student_ids[]") as string[];
+  if (mat && studentIds.length > 0) {
+    await admin.from("material_assignments").insert(
+      studentIds.map(sid => ({ material_id: mat.id, student_id: sid }))
+    );
+  }
+
+  revalidatePath("/tutor/materials");
+  return { ok: true };
+}
+
+export async function setMaterialAssignments(materialId: string, studentIds: string[]) {
+  const supabaseServer = await createClient();
+  const { data: { user } } = await supabaseServer.auth.getUser();
+  if (!user) return { error: "Не авторизован" };
+
+  const admin = createAdminClient();
+  const { data: mat } = await admin.from("materials").select("tutor_id").eq("id", materialId).single();
+  if (!mat || mat.tutor_id !== user.id) return { error: "Нет доступа" };
+
+  await admin.from("material_assignments").delete().eq("material_id", materialId);
+  if (studentIds.length > 0) {
+    const { error } = await admin.from("material_assignments").insert(
+      studentIds.map(sid => ({ material_id: materialId, student_id: sid }))
+    );
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/tutor/materials");
   return { ok: true };
 }
 
