@@ -2,10 +2,19 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import NewLessonForm from "./NewLessonForm";
 import LessonCard from "./LessonCard";
+import CalendarView from "./CalendarView";
 
-export default async function SchedulePage() {
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view } = await searchParams;
+  const isCalendar = view === "calendar";
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -20,39 +29,65 @@ export default async function SchedulePage() {
     db.from("subscriptions").select("id, student_id, balance, name").eq("tutor_id", tutorId).eq("status", "active"),
   ]);
 
-  const all = lessons ?? [];
-  const upcoming   = all.filter(l => l.status === "scheduled");
-  const past       = all.filter(l => l.status !== "scheduled");
+  const all      = lessons ?? [];
+  const upcoming = all.filter(l => l.status === "scheduled");
+  const past     = all.filter(l => l.status !== "scheduled");
+  const card     = { background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" };
 
-  const card = { background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" };
+  const tabBase  = "px-4 py-2 rounded-xl text-sm font-medium transition-all";
+  const tabActive  = { background: "var(--gradient-primary)", color: "white" };
+  const tabInactive = { color: "var(--brown-mid)", border: "1px solid var(--brown-pale)", background: "white" };
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Расписание</h1>
-
-      {/* Форма */}
-      <div className="rounded-2xl border p-5 mb-6" style={card}>
-        <h2 className="font-semibold mb-4" style={{ color: "var(--brown-dark)" }}>Добавить занятие</h2>
-        <NewLessonForm students={students ?? []} subscriptions={subscriptions ?? []} />
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+        <h1 className="text-2xl font-bold">Расписание</h1>
+        <div className="flex gap-2">
+          <Link href="/tutor/schedule" className={tabBase}
+            style={!isCalendar ? tabActive : tabInactive}>
+            Список
+          </Link>
+          <Link href="/tutor/schedule?view=calendar" className={tabBase}
+            style={isCalendar ? tabActive : tabInactive}>
+            Календарь
+          </Link>
+        </div>
       </div>
 
-      {/* Предстоящие */}
-      <h2 className="font-semibold mb-3" style={{ color: "var(--brown-dark)" }}>Предстоящие</h2>
-      {upcoming.length === 0 ? (
-        <p className="text-sm mb-6" style={{ color: "var(--brown-light)" }}>Нет запланированных занятий</p>
-      ) : (
-        <div className="space-y-2 mb-6">
-          {upcoming.map(l => <LessonCard key={l.id} lesson={l} />)}
+      {isCalendar ? (
+        /* ── Вид: Календарь ── */
+        <div className="rounded-2xl border p-4 sm:p-5" style={card}>
+          <CalendarView
+            lessons={all}
+            students={students ?? []}
+            subscriptions={subscriptions ?? []}
+          />
         </div>
-      )}
-
-      {/* Прошедшие */}
-      {past.length > 0 && (
+      ) : (
+        /* ── Вид: Список ── */
         <>
-          <h2 className="font-semibold mb-3" style={{ color: "var(--brown-light)" }}>История</h2>
-          <div className="space-y-2">
-            {past.map(l => <LessonCard key={l.id} lesson={l} />)}
+          <div className="rounded-2xl border p-5 mb-6" style={card}>
+            <h2 className="font-semibold mb-4" style={{ color: "var(--brown-dark)" }}>Добавить занятие</h2>
+            <NewLessonForm students={students ?? []} subscriptions={subscriptions ?? []} />
           </div>
+
+          <h2 className="font-semibold mb-3" style={{ color: "var(--brown-dark)" }}>Предстоящие</h2>
+          {upcoming.length === 0 ? (
+            <p className="text-sm mb-6" style={{ color: "var(--brown-light)" }}>Нет запланированных занятий</p>
+          ) : (
+            <div className="space-y-2 mb-6">
+              {upcoming.map(l => <LessonCard key={l.id} lesson={l} />)}
+            </div>
+          )}
+
+          {past.length > 0 && (
+            <>
+              <h2 className="font-semibold mb-3" style={{ color: "var(--brown-light)" }}>История</h2>
+              <div className="space-y-2">
+                {past.map(l => <LessonCard key={l.id} lesson={l} />)}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
