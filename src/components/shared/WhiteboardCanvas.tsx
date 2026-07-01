@@ -8,6 +8,7 @@ import {
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
   Maximize2, Hand, Navigation, Undo2, Redo2, Pointer, Lock, Unlock, ImagePlus, Link, FileText,
   Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile, Sparkles,
+  ChevronsUp, ChevronsDown, ChevronUp, ChevronDown,
 } from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -2302,6 +2303,22 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     send({ type:"update", item: next });
   };
 
+  // ── layer order helpers ──────────────────────────────────────────────────────
+  const reorderItem = (id: string, dir: "front" | "back" | "forward" | "backward") => {
+    const arr = itemsRef.current;
+    const idx = arr.findIndex(i => i.id === id);
+    if (idx < 0) return;
+    pushHistory({ type:"clear", saved: [...arr] });
+    const item = arr.splice(idx, 1)[0];
+    if      (dir === "front")    arr.push(item);
+    else if (dir === "back")     arr.unshift(item);
+    else if (dir === "forward")  arr.splice(Math.min(idx + 1, arr.length), 0, item);
+    else                         arr.splice(Math.max(idx - 1, 0), 0, item);
+    render();
+    send({ type:"clear" });
+    arr.forEach(i => send({ type:"path", item: i }));
+  };
+
   // ── board dice/wheel helpers ─────────────────────────────────────────────────
   const addDiceToBoard = (count = 1) => {
     const { zoom, panX, panY } = viewRef.current;
@@ -3375,18 +3392,49 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
               )}
-              {/* Duplicate + Crop + Delete buttons — flip below item if near top of canvas */}
+              {/* Duplicate + Crop + Layer + Delete buttons — flip below item if near top of canvas */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
                 style={{ top: tl.y > 36 ? -28 : sh + 4, right:0, zIndex:36 }}>
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
                   className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
+                  title="Дублировать"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>⧉</button>
                 {selectedItem.type === "image" && (
                   <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} onClick={() => setCropId(selectedItem.id)}
                     className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
+                    title="Обрезать"
                     style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>✂</button>
                 )}
+                {/* Layer order buttons */}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                  onClick={() => reorderItem(selectedItem.id, "forward")}
+                  className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+                  title="Вперёд"
+                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+                  <ChevronUp size={14}/>
+                </button>
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                  onClick={() => reorderItem(selectedItem.id, "backward")}
+                  className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+                  title="Назад"
+                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+                  <ChevronDown size={14}/>
+                </button>
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                  onClick={() => reorderItem(selectedItem.id, "front")}
+                  className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+                  title="На передний план"
+                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+                  <ChevronsUp size={14}/>
+                </button>
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                  onClick={() => reorderItem(selectedItem.id, "back")}
+                  className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+                  title="На задний план"
+                  style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+                  <ChevronsDown size={14}/>
+                </button>
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
                   onClick={() => {
                     const toRemove = new Set(selectedIds.size > 0 ? selectedIds : [selectedItem.id]);
