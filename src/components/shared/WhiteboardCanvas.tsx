@@ -3392,7 +3392,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
               )}
-              {/* Duplicate + Crop + Layer + Delete buttons — flip below item if near top of canvas */}
+              {/* Duplicate + Crop + Color + Layer + Delete buttons — flip below item if near top of canvas */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
                 style={{ top: tl.y > 36 ? -28 : sh + 4, right:0, zIndex:36 }}>
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
@@ -3405,6 +3405,19 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
                     title="Обрезать"
                     style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>✂</button>
+                )}
+                {/* Text color swatch */}
+                {selectedItem.type === "text" && !locked && (
+                  <label onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                    title="Цвет текста"
+                    className="relative flex items-center justify-center rounded-lg border cursor-pointer hover:opacity-80 overflow-hidden"
+                    style={{ background:"white", borderColor:"var(--brown-pale)", minHeight:28, minWidth:28 }}>
+                    <span className="text-sm font-bold leading-none pointer-events-none select-none"
+                      style={{ color:(selectedItem as TextItem).color }}>A</span>
+                    <input type="color" value={(selectedItem as TextItem).color}
+                      onChange={e => { const next={...selectedItem as TextItem, color:e.target.value}; updateBoardItem(next); }}
+                      className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                  </label>
                 )}
                 {/* Layer order buttons */}
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
@@ -3474,30 +3487,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   }}>
                   <Pencil size={14} color="white"/>
                 </button>
-              )}
-              {/* Text color picker */}
-              {selectedItem.type === "text" && !locked && (
-                <div className="absolute pointer-events-auto flex items-center gap-1.5 px-2 py-1 rounded-xl shadow-lg border"
-                  style={{ top: tl.y > 44 ? -44 : sh + 4, left:"50%", transform:"translateX(-50%)", background:"white",
-                    borderColor:"var(--brown-pale)", whiteSpace:"nowrap", zIndex:35 }}
-                  onMouseDown={e => e.stopPropagation()}
-                  onTouchStart={e => e.stopPropagation()}
-                  onTouchEnd={e => e.stopPropagation()}>
-                  {/* Preset colors */}
-                  {["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#ffffff"].map(c => (
-                    <button key={c} onClick={() => { const next={...selectedItem as TextItem, color:c}; updateBoardItem(next); }}
-                      className="w-5 h-5 rounded-full border-2 hover:scale-110 transition-transform shrink-0"
-                      style={{ background:c, borderColor: (selectedItem as TextItem).color === c ? "#4a80f0" : "var(--brown-pale)" }}/>
-                  ))}
-                  {/* Custom color */}
-                  <label className="w-5 h-5 rounded-full border-2 cursor-pointer overflow-hidden relative shrink-0"
-                    style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}
-                    title="Другой цвет">
-                    <input type="color" value={(selectedItem as TextItem).color}
-                      onChange={e => { const next={...selectedItem as TextItem, color:e.target.value}; updateBoardItem(next); }}
-                      className="absolute opacity-0 w-full h-full cursor-pointer" style={{top:0,left:0}}/>
-                  </label>
-                </div>
               )}
               {/* Resize handle — text only */}
               {selectedItem.type === "text" && !locked && (
