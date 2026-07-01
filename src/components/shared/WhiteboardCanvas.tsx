@@ -4179,12 +4179,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           <ToolBtn active={false} onClick={() => { commitText(); pickTool("image"); setImgDialog(true); }} title="">
             <ImagePlus size={19}/>
           </ToolBtn>
-          {/* AI Layout */}
-          {role === "tutor" && (
-            <ToolBtn active={false} onClick={() => aiInputRef.current?.click()} title="">
-              {aiLoading ? <span className="text-sm animate-spin">⟳</span> : <Sparkles size={18}/>}
-            </ToolBtn>
-          )}
+          {/* More tools "+" */}
+          <ToolBtn active={showMoreTools} onClick={() => setShowMoreTools(v => !v)} title="">
+            <span className="text-base font-bold leading-none">+</span>
+          </ToolBtn>
           <div className="flex-1 shrink-0 min-w-2"/>
           {role==="tutor" && (
             <button onClick={bringToMe} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border-2 font-medium shrink-0"
@@ -4196,6 +4194,49 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           <button onClick={redo} disabled={!canRedo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Redo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
           <button onClick={() => applyView(1,0,0)} className="p-2 rounded-lg border shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Maximize2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
         </div>
+        {/* More tools panel */}
+        {showMoreTools && (
+          <div className="flex items-center gap-1.5 px-2 py-2 border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)", touchAction:"pan-x" }}>
+            <button onClick={()=>{setShowSymbols(v=>!v);setShowMoreTools(false);}}
+              className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+              style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+              <span className="text-lg">∑</span><span className="text-xs">Символы</span>
+            </button>
+            <button onClick={()=>{setShowDice(v=>!v);setShowMoreTools(false);}}
+              className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+              style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+              <span className="text-lg">🎲</span><span className="text-xs">Кубик</span>
+            </button>
+            <button onClick={()=>{setShowWheel(v=>!v);setShowMoreTools(false);}}
+              className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+              style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+              <span className="text-lg">🎡</span><span className="text-xs">Колесо</span>
+            </button>
+            {role==="tutor" && (
+              <button onClick={()=>{setShowTablePicker(v=>!v);setShowMoreTools(false);}}
+                className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                <span className="text-lg">⊞</span><span className="text-xs">Таблица</span>
+              </button>
+            )}
+            {role==="tutor" && (
+              <label className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0 cursor-pointer"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                <FileText size={20}/><span className="text-xs">PDF</span>
+                <input type="file" accept=".pdf,application/pdf" className="hidden"
+                  onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);openPdfPicker(URL.createObjectURL(f));}}/>
+              </label>
+            )}
+            {role==="tutor" && (
+              <label className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0 cursor-pointer"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                <span className="text-lg">🎬</span><span className="text-xs">Видео</span>
+                <input type="file" accept="video/*" className="hidden"
+                  onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);addVideoToBoard(URL.createObjectURL(f));}}/>
+              </label>
+            )}
+          </div>
+        )}
         {/* Row 2: context — sizes + colors / shapes / ruling */}
         <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto" style={{ touchAction:"pan-x" }}>
           {/* Text tool hint */}
