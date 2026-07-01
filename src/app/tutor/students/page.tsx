@@ -76,53 +76,57 @@ export default async function StudentsPage() {
             const debt = debtMap[s.id] ?? 0;
             const sub  = subMap[s.id] ?? null;
             return (
-              <div key={s.id} className="rounded-xl border p-4 flex items-center gap-4" style={card}>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0"
-                  style={{ background: "var(--gradient-primary)" }}>
-                  {s.name[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <Link href={`/tutor/students/${s.id}`} className="font-medium hover:underline" style={{ color: "var(--brown-dark)" }}>
-                    {s.name}
-                  </Link>
-                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                    {s.notes && <span className="text-sm truncate" style={{ color: "var(--brown-mid)" }}>{s.notes}</span>}
-                    {sub ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{ background: sub.balance < sub.total * 0.25 ? "#fff0f0" : "#f0fdf4",
-                                 color: sub.balance < sub.total * 0.25 ? "#c0392b" : "#1a7a3a" }}>
-                        Абонемент: {sub.balance.toLocaleString("ru")} ₽
-                      </span>
-                    ) : s.default_price_rub ? (
-                      <span className="text-xs" style={{ color: "var(--brown-light)" }}>
-                        {s.default_price_rub} ₽/занятие
-                      </span>
-                    ) : null}
+              <div key={s.id} className="rounded-xl border p-4" style={card}>
+                {/* Верхняя строка: аватар + имя + статус оплаты */}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0"
+                    style={{ background: "var(--gradient-primary)" }}>
+                    {s.name[0].toUpperCase()}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/tutor/students/${s.id}`}
+                      className="font-semibold hover:underline block truncate"
+                      style={{ color: "var(--brown-dark)" }}>
+                      {s.name}
+                    </Link>
+                    {s.notes && (
+                      <span className="text-xs truncate block" style={{ color: "var(--brown-mid)" }}>{s.notes}</span>
+                    )}
+                  </div>
+                  {/* Статус: абонемент или долг */}
+                  {sub ? (
+                    <span className="text-xs px-2.5 py-1 rounded-lg font-medium shrink-0"
+                      style={{
+                        background: sub.balance < sub.total * 0.25 ? "#fff0f0" : "#f0fdf4",
+                        color:      sub.balance < sub.total * 0.25 ? "#c0392b" : "#1a7a3a",
+                        border:     `1px solid ${sub.balance < sub.total * 0.25 ? "#fecaca" : "#bbf7d0"}`,
+                      }}>
+                      {sub.balance.toLocaleString("ru")} ₽
+                    </span>
+                  ) : debt > 0 ? (
+                    <span className="text-xs px-2.5 py-1 rounded-lg font-medium shrink-0"
+                      style={{ background: "#fff3e0", color: "#c07800", border: "1px solid #f0d090" }}>
+                      Долг: {debt.toLocaleString("ru")} ₽
+                    </span>
+                  ) : null}
                 </div>
 
-                {/* Долг (только для поурочных) */}
-                {!sub && debt > 0 && (
-                  <div className="shrink-0 text-sm font-semibold px-3 py-1 rounded-lg"
-                    style={{ background: "#fff3e0", color: "#c07800", border: "1px solid #f0d090" }}>
-                    Долг: {debt.toLocaleString("ru")} ₽
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                  <div className="text-sm font-mono px-3 py-1 rounded-lg" style={{
-                    background: "var(--brown-pale)", color: "var(--brown-dark)"
-                  }}>
+                {/* Нижняя строка: код + кнопки */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-mono px-2.5 py-1 rounded-lg"
+                    style={{ background: "var(--brown-pale)", color: "var(--brown-dark)" }}>
                     {s.access_code}
-                  </div>
+                  </span>
                   <CopyStudentLink code={s.access_code} />
-                  <Link
-                    href={`/student/${s.access_code}`}
-                    target="_blank"
+                  <Link href={`/student/${s.access_code}`} target="_blank"
                     className="text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all"
-                    style={{ background: "var(--gradient-primary)", color: "white" }}
-                  >
-                    Открыть ↗
+                    style={{ background: "var(--gradient-primary)", color: "white" }}>
+                    Кабинет ↗
+                  </Link>
+                  <Link href={`/tutor/students/${s.id}`}
+                    className="text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all border"
+                    style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)" }}>
+                    {sub ? "Абонемент" : "Детали"}
                   </Link>
                   <DeleteStudentButton id={s.id} name={s.name} />
                 </div>
