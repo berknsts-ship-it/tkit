@@ -2902,8 +2902,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
           {/* Symbol picker (shown when activated from more-tools) */}
           {showSymbols && (
-            <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4"
+            <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
               style={{ background:"rgba(0,0,0,0.2)" }}
+              onTouchStart={e => e.stopPropagation()}
               onClick={e=>{ if(e.target===e.currentTarget) setShowSymbols(false); }}>
               <div className="rounded-2xl border shadow-xl overflow-hidden"
                 style={{ background:"white", borderColor:"var(--brown-pale)", width:340 }}>
@@ -2933,8 +2934,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
           {/* Dice panel */}
           {showDice && (
-            <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4"
+            <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
               style={{ background:"rgba(0,0,0,0.2)" }}
+              onTouchStart={e => e.stopPropagation()}
               onClick={e=>{ if(e.target===e.currentTarget) setShowDice(false); }}>
               <div className="rounded-2xl border shadow-xl p-4 w-56"
                 style={{ background:"white", borderColor:"var(--brown-pale)" }}>
@@ -2981,8 +2983,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
           {/* Wheel panel */}
           {showWheel && (
-            <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4"
+            <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
               style={{ background:"rgba(0,0,0,0.2)" }}
+              onTouchStart={e => e.stopPropagation()}
               onClick={e=>{ if(e.target===e.currentTarget) setShowWheel(false); }}>
               <div className="rounded-2xl border shadow-xl p-4 w-72"
                 style={{ background:"white", borderColor:"var(--brown-pale)" }}>
