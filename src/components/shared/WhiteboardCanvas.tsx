@@ -947,6 +947,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   // inertia
   const inertiaRef = useRef<{ vx: number; vy: number; rafId: number } | null>(null);
   const lastPanPt  = useRef<{ cx: number; cy: number; t: number } | null>(null);
+  // gesture disambiguation: pending draw that switches from pan to draw on drag
+  const touchDrawPending = useRef<{ cx: number; cy: number; wx: number; wy: number } | null>(null);
 
   // select
   const [selectedId,  setSelectedId_]  = useState<string | null>(null);
@@ -1801,6 +1803,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       livePathRef.current = null;
       liveShapeRef.current = null;
       panning.current = false;
+      touchDrawPending.current = null;
       eraserActiveRef.current = false;
       if (e.touches.length === 2) {
         const r = containerRef.current!.getBoundingClientRect();
@@ -1814,20 +1817,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     const { cx, cy } = clientXY(e);
     const w = s2w(cx, cy);
     stopInertia();
-    // place pending symbol first (before tool checks, mirrors onMouseDown logic)
+    touchDrawPending.current = null;
+
+    // place pending symbol first
     if (pendingSymbol) {
       placeSymbol(pendingSymbol, w.x, w.y, pendingSymbol.length === 1 && pendingSymbol.codePointAt(0)! > 127 ? 48 : 32);
       setPendingSymbol(null); setPendingSymbolPos(null); return;
     }
-    if (tool === "hand" || tool === "select") {
-      const hit = tool === "select"
-        ? [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y))
-        : null;
-      if (tool === "hand" || !hit) {
-        panning.current = true;
-        panOrigin.current = { cx, cy, vx: viewRef.current.panX, vy: viewRef.current.panY };
-        lastPanPt.current = { cx, cy, t: Date.now() };
-      } else if (hit.locked) {
+
+    // Always hit-test: tapping any item selects it regardless of tool
+    const hit = [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y));
+    if (hit) {
+      if (hit.locked) {
         if (role === "tutor") { setSelectedId(hit.id); setSelectedIds(new Set([hit.id])); }
       } else {
         setSelectedId(hit.id);
@@ -1837,27 +1838,63 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       }
       return;
     }
-    if (tool === "shape") {
-      const sp = snapPt(w.x, w.y);
-      liveShapeRef.current = { wx1: sp.x, wy1: sp.y, wx2: sp.x, wy2: sp.y }; return;
+
+    // No item hit — deselect and handle by tool
+    setSelectedId(null); setSelectedIds(new Set());
+
+    if (tool === "text") {
+      setTextInput({ wx: w.x, wy: w.y }); setTextValue("");
+      setTimeout(() => textRef.current?.focus(), 50); return;
     }
-    if (tool === "text") { setTextInput({ wx: w.x, wy: w.y }); setTextValue(""); setTimeout(() => textRef.current?.focus(), 50); return; }
     if (tool === "laser") return;
-    if (tool === "eraser") { eraserActiveRef.current = true; eraserRadiusRef.current = size * 3; eraseAt(w.x, w.y); return; }
-    const pathId = uid();
-    const hl = tool === "highlight";
-    const c = hl ? hlColor : color;
-    const s = hl ? Math.max(size * 3, 20) : size;
-    livePathRef.current = {
-      type:"path", id: pathId, points:[w], color:c, size:s, eraser:false, highlight:hl,
-      ...(!hl && opacity < 100 ? { opacity } : {}),
-      ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
-    };
+
+    // All other tools: start panning. Drawing tools (pen/highlight/eraser/shape)
+    // will switch from pan to draw once the finger moves more than the threshold.
+    panning.current = true;
+    panOrigin.current = { cx, cy, vx: viewRef.current.panX, vy: viewRef.current.panY };
+    lastPanPt.current = { cx, cy, t: Date.now() };
+    if (tool === "pen" || tool === "highlight" || tool === "eraser" || tool === "shape") {
+      touchDrawPending.current = { cx, cy, wx: w.x, wy: w.y };
+    }
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
     e.preventDefault();
     const r = containerRef.current!.getBoundingClientRect();
+
+    // Gesture disambiguation: switch from pan to draw once finger moves >8px
+    if (touchDrawPending.current && e.touches.length === 1) {
+      const moveCx = e.touches[0].clientX - r.left;
+      const moveCy = e.touches[0].clientY - r.top;
+      const dist = Math.hypot(moveCx - touchDrawPending.current.cx, moveCy - touchDrawPending.current.cy);
+      if (dist > 8) {
+        const start = touchDrawPending.current;
+        touchDrawPending.current = null;
+        panning.current = false;
+        const sw = s2w(moveCx, moveCy);
+        if (tool === "eraser") {
+          eraserActiveRef.current = true; eraserRadiusRef.current = size * 3;
+          eraseAt(start.wx, start.wy); eraseAt(sw.x, sw.y);
+        } else if (tool === "shape") {
+          const sp = snapPt(start.wx, start.wy);
+          liveShapeRef.current = { wx1: sp.x, wy1: sp.y, wx2: sw.x, wy2: sw.y };
+        } else {
+          const hl = tool === "highlight";
+          const c = hl ? hlColor : color;
+          const s = hl ? Math.max(size * 3, 20) : size;
+          const pathId = uid();
+          livePathRef.current = {
+            type:"path", id:pathId, points:[{x:start.wx,y:start.wy}, sw],
+            color:c, size:s, eraser:false, highlight:hl,
+            ...(!hl && opacity < 100 ? { opacity } : {}),
+            ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
+          };
+          render();
+        }
+        return;
+      }
+    }
+
     if (e.touches.length === 2) {
       const dx = e.touches[1].clientX - e.touches[0].clientX;
       const dy = e.touches[1].clientY - e.touches[0].clientY;
@@ -1916,6 +1953,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
   const onTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault();
+    touchDrawPending.current = null;
     if (e.touches.length < 2 && panning.current) {
       panning.current = false;
       const last = lastPanPt.current;
@@ -3041,6 +3079,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           selDragRef.current = null; setTouchDragging(false);
           livePathRef.current = null; liveShapeRef.current = null;
           panning.current = false; eraserActiveRef.current = false;
+          touchDrawPending.current = null;
         }}>
 
         <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }} />
@@ -3312,7 +3351,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         })()}
 
         {/* Selection overlay — hidden while touch-dragging to avoid stale DOM position */}
-        {selectedItem && tool === "select" && !touchDragging && (() => {
+        {selectedItem && !touchDragging && (() => {
           const bounds = itemBounds(selectedItem);
           const PAD = 8 / zoom;
           const tl = w2s(bounds.x0 - PAD, bounds.y0 - PAD);
