@@ -27,6 +27,7 @@ interface Lesson {
   id: string;
   status: Status;
   scheduled_at: string;
+  rescheduled_to?: string | null;
   duration_min?: number;
   notes?: string | null;
   students?: { name: string } | null;
@@ -41,7 +42,12 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
   const [loading,     setLoading]    = useState(false);
   const [payLoading,  setPayLoading] = useState(false);
   const [confirmPay,  setConfirmPay] = useState(false);
-  const [editMode,    setEditMode]   = useState(false);
+  const [editMode,       setEditMode]      = useState(false);
+  const [rescheduleMode, setRescheduleMode] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+  const [rescheduledTo, setRescheduledTo] = useState(lesson.rescheduled_to ?? null);
 
   // edit form state — initialised from current lesson values
   const initDt = new Date(lesson.scheduled_at);
@@ -63,6 +69,7 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
 
   const changeStatus = async (s: Status) => {
     setOpen(false);
+    if (s === "rescheduled") { setRescheduleMode(true); return; }
     if (DESTRUCTIVE.includes(s) && !window.confirm(
       s === "cancelled" ? "Отменить урок?" : "Отметить как сгоревший?"
     )) return;
@@ -70,6 +77,17 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
     await updateLessonStatus(lesson.id, s);
     setStatus(s);
     setLoading(false);
+  };
+
+  const submitReschedule = async () => {
+    if (!rescheduleDate || !rescheduleTime) return;
+    setRescheduleLoading(true);
+    const iso = new Date(`${rescheduleDate}T${rescheduleTime}:00`).toISOString();
+    await rescheduleLesson(lesson.id, iso);
+    setRescheduledTo(iso);
+    setStatus("rescheduled");
+    setRescheduleMode(false);
+    setRescheduleLoading(false);
   };
 
   const handleTogglePay = async () => {
@@ -181,6 +199,11 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
             style={{ background: cfg.bg, color: cfg.color }}>
             {loading ? "..." : cfg.label}
+            {status === "rescheduled" && rescheduledTo && (
+              <span className="ml-1 font-normal">
+                → {new Date(rescheduledTo).toLocaleDateString("ru", { day:"numeric", month:"short" })}
+              </span>
+            )}
             <ChevronDown size={12} style={{ opacity: 0.7 }} />
           </button>
 
@@ -213,6 +236,29 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
         </div>
       )}
 
+      {/* Форма переноса */}
+      {rescheduleMode && (
+        <div className="flex items-center gap-2 px-4 pb-4 pt-2 flex-wrap border-t"
+          style={{ borderColor: "var(--brown-pale)", background: "#fdf8f0" }}>
+          <span className="text-sm" style={{ color: "var(--brown-mid)" }}>Перенести на:</span>
+          <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)}
+            className="px-3 py-1.5 rounded-lg border outline-none text-sm"
+            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)", background: "white" }}/>
+          <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
+            className="px-3 py-1.5 rounded-lg border outline-none text-sm"
+            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)", background: "white" }}/>
+          <button onClick={submitReschedule} disabled={!rescheduleDate || !rescheduleTime || rescheduleLoading}
+            className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
+            style={{ background: "var(--gradient-primary)" }}>
+            {rescheduleLoading ? "..." : "Сохранить"}
+          </button>
+          <button onClick={() => setRescheduleMode(false)}
+            className="px-3 py-1.5 rounded-lg text-sm border"
+            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
+            Отмена
+          </button>
+        </div>
+      )}
       {/* Инлайн-форма редактирования */}
       {editMode && (
         <div className="border-t px-4 pb-4 pt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"

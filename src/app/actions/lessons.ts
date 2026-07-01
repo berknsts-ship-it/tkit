@@ -27,10 +27,10 @@ export async function updateLessonStatus(id: string, status: string) {
   revalidatePath("/tutor/schedule");
 }
 
-export async function rescheduleLesson(id: string, scheduledAt: string) {
+export async function rescheduleLesson(id: string, rescheduledTo: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("lessons")
-    .update({ status: "scheduled", scheduled_at: scheduledAt })
+    .update({ status: "rescheduled", rescheduled_to: rescheduledTo })
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/tutor/schedule");
