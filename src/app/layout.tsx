@@ -54,6 +54,14 @@ export default function RootLayout({
   return (
     <html lang="ru" className={`${lora.variable} ${nunito.variable} h-full`}>
       <body className="min-h-full flex flex-col">
+        <style dangerouslySetInnerHTML={{ __html: `
+          #page-loader { position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center; background:#fdf8f0; }
+          #page-loader::after { content:''; width:36px; height:36px; border:3px solid #e8d5b0; border-top-color:#7a4a1e; border-radius:50%; animation:spin .7s linear infinite; }
+          @keyframes spin { to { transform:rotate(360deg); } }
+          body.loaded #page-loader { display:none; }
+        `}} />
+        <div id="page-loader" />
+        <script dangerouslySetInnerHTML={{ __html: `document.addEventListener('DOMContentLoaded', function(){ document.body.classList.add('loaded'); });` }} />
         <BackgroundDecor />
         <div className="relative flex flex-col flex-1" style={{ zIndex: 1 }}>{children}</div>
       </body>
