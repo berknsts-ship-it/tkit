@@ -33,6 +33,11 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
         setState("unsubscribed");
         return;
       }
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setState("denied");
+        return;
+      }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
