@@ -3,15 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
-
-// Convert local datetime in a named timezone to UTC ISO string
-function localToUTC(date: string, time: string, tz: string): string {
-  const utcNaive = new Date(`${date}T${time}:00Z`);
-  const tzStr = utcNaive.toLocaleString("sv-SE", { timeZone: tz });
-  const tzDate = new Date(tzStr.replace(" ", "T") + "Z");
-  const offset = utcNaive.getTime() - tzDate.getTime();
-  return new Date(utcNaive.getTime() + offset).toISOString();
-}
+import { localToUTC, nextOccurrenceUTC } from "@/lib/notifUtils";
 
 export async function createNotification(fields: {
   title: string;
@@ -20,6 +12,7 @@ export async function createNotification(fields: {
   time: string;
   timezone: string;
   studentIds: string[];
+  recurrenceDays?: number[];
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -29,12 +22,14 @@ export async function createNotification(fields: {
 
   let recipientIds = fields.studentIds;
   if (recipientIds.length === 0) {
-    const { data: students } = await admin.from("students")
-      .select("id").eq("tutor_id", user.id);
+    const { data: students } = await admin.from("students").select("id").eq("tutor_id", user.id);
     recipientIds = (students ?? []).map(s => s.id);
   }
 
-  const scheduledAt = localToUTC(fields.date, fields.time, fields.timezone);
+  const isRecurring = (fields.recurrenceDays?.length ?? 0) > 0;
+  const scheduledAt = isRecurring
+    ? nextOccurrenceUTC(fields.recurrenceDays!, fields.time, fields.timezone)
+    : localToUTC(fields.date, fields.time, fields.timezone);
 
   const { data: notif, error } = await admin.from("notifications").insert({
     tutor_id: user.id,
@@ -42,6 +37,8 @@ export async function createNotification(fields: {
     body: fields.body,
     scheduled_at: scheduledAt,
     timezone: fields.timezone,
+    recurrence_days: isRecurring ? fields.recurrenceDays : null,
+    recurrence_time: isRecurring ? fields.time : null,
   }).select("id").single();
 
   if (error || !notif) return { error: error?.message ?? "Ошибка создания" };
@@ -62,8 +59,7 @@ export async function deleteNotification(id: string) {
   if (!user) return { error: "Не авторизован" };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("notifications").delete()
-    .eq("id", id).eq("tutor_id", user.id);
+  const { error } = await admin.from("notifications").delete().eq("id", id).eq("tutor_id", user.id);
   if (error) return { error: error.message };
   revalidatePath("/tutor/notifications");
 }
