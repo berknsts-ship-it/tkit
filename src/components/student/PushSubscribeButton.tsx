@@ -75,9 +75,14 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
             <Bell size={13}/> Уведомления
           </div>
         ) : state === "denied" ? (
-          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
-            style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.55)" }}>
-            <BellOff size={13}/> Заблокированы
+          <div className="flex flex-col gap-1.5 px-3 py-2 rounded-xl text-xs"
+            style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", maxWidth: 240 }}>
+            <div className="flex items-center gap-1.5 font-semibold">
+              <BellOff size={13}/> Уведомления заблокированы
+            </div>
+            <div style={{ color: "rgba(255,255,255,0.7)", lineHeight: 1.5 }}>
+              Нажми 🔒 у адресной строки → Настройки сайта → Уведомления → Разрешить → обнови страницу
+            </div>
           </div>
         ) : state === "subscribed" ? (
           <button onClick={unsubscribe}
