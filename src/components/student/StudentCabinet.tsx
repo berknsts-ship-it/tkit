@@ -7,7 +7,7 @@ import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { getSnapshotItems } from "@/app/actions/board";
 import { studentSubmitHomework, studentUnsubmitHomework } from "@/app/actions/homework";
-import PushSubscribeButton from "@/components/student/PushSubscribeButton";
+import PushAutoSubscribe from "@/components/student/PushAutoSubscribe";
 import NotificationBanner from "@/components/student/NotificationBanner";
 import { speak } from "@/lib/speak";
 import {
@@ -178,7 +178,7 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
         <div className="relative flex gap-2 flex-wrap items-center">
           <Chip icon="📋" label={`${homework.length} ${plural(homework.length, "задание","задания","заданий")}`} />
           <Chip icon="📅" label={`${lessons.length} ${plural(lessons.length, "урок","урока","уроков")}`} />
-          <PushSubscribeButton studentId={studentId} />
+          <PushAutoSubscribe studentId={studentId} />
         </div>
       </div>
 
