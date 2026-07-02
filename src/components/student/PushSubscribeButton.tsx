@@ -5,6 +5,7 @@ import { Bell, BellOff, BellRing } from "lucide-react";
 
 export default function PushSubscribeButton({ studentId }: { studentId: string }) {
   const [state, setState] = useState<"loading" | "unsupported" | "denied" | "subscribed" | "unsubscribed">("loading");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -16,14 +17,22 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
       reg.pushManager.getSubscription().then(sub => {
         setState(sub ? "subscribed" : "unsubscribed");
       });
+    }).catch(err => {
+      setErrMsg("SW: " + String(err));
+      setState("unsubscribed");
     });
   }, []);
 
   const subscribe = async () => {
     setState("loading");
+    setErrMsg(null);
     try {
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidKey) { console.error("[push] NEXT_PUBLIC_VAPID_PUBLIC_KEY not set"); setState("unsubscribed"); return; }
+      if (!vapidKey) {
+        setErrMsg("VAPID key not set");
+        setState("unsubscribed");
+        return;
+      }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -34,10 +43,10 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ studentId, subscription: sub.toJSON() }),
       });
-      console.log("[push] saved subscription, status:", res.status);
+      if (!res.ok) { setErrMsg("API error: " + res.status); setState("unsubscribed"); return; }
       setState("subscribed");
     } catch (err) {
-      console.error("[push] subscribe error:", err);
+      setErrMsg(String(err));
       setState(Notification.permission === "denied" ? "denied" : "unsubscribed");
     }
   };
@@ -57,34 +66,37 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
     setState("unsubscribed");
   };
 
-  if (state === "unsupported") return null;
-  if (state === "loading") return (
-    <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl opacity-40"
-      style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}>
-      <Bell size={13}/> Уведомления
-    </div>
-  );
-
-  if (state === "denied") return (
-    <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
-      style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.55)" }}>
-      <BellOff size={13}/> Уведомления заблокированы
-    </div>
-  );
-
-  if (state === "subscribed") return (
-    <button onClick={unsubscribe}
-      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-all hover:opacity-80"
-      style={{ background: "rgba(255,255,255,0.20)", color: "rgba(255,255,255,0.9)" }}>
-      <BellRing size={13}/> Уведомления включены
-    </button>
-  );
-
   return (
-    <button onClick={subscribe}
-      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-all hover:opacity-80"
-      style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}>
-      <Bell size={13}/> Включить уведомления
-    </button>
+    <div className="flex flex-col gap-1">
+      {state === "unsupported" ? null
+        : state === "loading" ? (
+          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl opacity-40"
+            style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}>
+            <Bell size={13}/> Уведомления
+          </div>
+        ) : state === "denied" ? (
+          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
+            style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.55)" }}>
+            <BellOff size={13}/> Заблокированы
+          </div>
+        ) : state === "subscribed" ? (
+          <button onClick={unsubscribe}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-all hover:opacity-80"
+            style={{ background: "rgba(255,255,255,0.20)", color: "rgba(255,255,255,0.9)" }}>
+            <BellRing size={13}/> Уведомления включены
+          </button>
+        ) : (
+          <button onClick={subscribe}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-all hover:opacity-80"
+            style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}>
+            <Bell size={13}/> Включить уведомления
+          </button>
+        )}
+      {errMsg && (
+        <div className="text-xs px-2 py-1 rounded" style={{ background: "rgba(255,0,0,0.3)", color: "white", maxWidth: 220, wordBreak: "break-all" }}>
+          {errMsg}
+        </div>
+      )}
+    </div>
   );
 }
