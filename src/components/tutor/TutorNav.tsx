@@ -10,14 +10,15 @@ import TKitLogo from "@/components/TKitLogo";
 import { SupportChatButton } from "@/components/SupportChat";
 
 const navLinks = [
-  { href: "/tutor/dashboard",  label: "Главная" },
-  { href: "/tutor/students",   label: "Ученики" },
-  { href: "/tutor/schedule",   label: "Расписание" },
-  { href: "/tutor/homework",   label: "Задания" },
-  { href: "/tutor/materials",  label: "Материалы" },
-  { href: "/tutor/board",      label: "Доска" },
-  { href: "/tutor/reference",  label: "Справочник", proOnly: true },
-  { href: "/tutor/vocabulary", label: "Словарь",    proOnly: true },
+  { href: "/tutor/dashboard",      label: "Главная" },
+  { href: "/tutor/students",       label: "Ученики" },
+  { href: "/tutor/schedule",       label: "Расписание" },
+  { href: "/tutor/homework",       label: "Задания" },
+  { href: "/tutor/materials",      label: "Материалы" },
+  { href: "/tutor/notifications",  label: "Уведомления" },
+  { href: "/tutor/board",          label: "Доска" },
+  { href: "/tutor/reference",      label: "Справочник", proOnly: true },
+  { href: "/tutor/vocabulary",     label: "Словарь",    proOnly: true },
 ];
 
 export default function TutorNav({ tutorName, isPro, isCreatorUser }: { tutorName: string; isPro: boolean; isCreatorUser?: boolean }) {

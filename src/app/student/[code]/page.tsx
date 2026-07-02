@@ -26,6 +26,7 @@ export default async function StudentPage({ params }: Props) {
     { data: allArticles },
     { data: snapshots },
     { data: topicsRaw },
+    { data: unreadNotifs },
   ] = await Promise.all([
     supabase.from("lessons").select("*").eq("student_id", student.id)
       .eq("status", "scheduled").order("scheduled_at"),
@@ -49,10 +50,30 @@ export default async function StudentPage({ params }: Props) {
       .select("id, title, language, vocabulary_words(id, word, translation, example)")
       .eq("student_id", student.id)
       .order("created_at", { ascending: false }),
+    // Notification IDs sent to this student
+    supabase.from("notification_recipients").select("notification_id")
+      .eq("student_id", student.id),
   ]);
 
-  const { data: tutor } = await supabase
-    .from("tutors").select("subject").eq("id", student.tutor_id).single();
+  const [{ data: tutor }, { data: readRows }] = await Promise.all([
+    supabase.from("tutors").select("subject").eq("id", student.tutor_id).single(),
+    supabase.from("notification_reads").select("notification_id").eq("student_id", student.id),
+  ]);
+
+  // Resolve unread notifications
+  const recipientIds = new Set((unreadNotifs ?? []).map(r => (r as { notification_id: string }).notification_id));
+  const readIds = new Set((readRows ?? []).map(r => r.notification_id));
+  const pendingNotifIds = [...recipientIds].filter(id => !readIds.has(id));
+  let unreadNotifications: { id: string; title: string; body: string }[] = [];
+  if (pendingNotifIds.length > 0) {
+    const { data } = await supabase.from("notifications")
+      .select("id, title, body, sent_at")
+      .in("id", pendingNotifIds)
+      .not("sent_at", "is", null)
+      .eq("tutor_id", student.tutor_id)
+      .order("sent_at", { ascending: false });
+    unreadNotifications = (data ?? []).map(n => ({ id: n.id, title: n.title, body: n.body }));
+  }
 
   // Merge direct + junction-table assigned materials (dedup by id)
   const directIds = new Set((directMaterials ?? []).map(m => m.id));
@@ -80,6 +101,7 @@ export default async function StudentPage({ params }: Props) {
       lessons={lessons ?? []}
       homework={homework ?? []}
       materials={materials}
+      unreadNotifications={unreadNotifications}
       articles={articles.map(a => ({ id: a.id, title: a.title, content: a.content }))}
       snapshots={snapshots ?? []}
       topics={(topicsRaw ?? []).map(t => ({

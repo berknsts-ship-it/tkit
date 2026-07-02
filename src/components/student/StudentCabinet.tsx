@@ -8,6 +8,7 @@ import SyncedVideo from "@/components/shared/SyncedVideo";
 import { getSnapshotItems } from "@/app/actions/board";
 import { studentSubmitHomework, studentUnsubmitHomework } from "@/app/actions/homework";
 import PushSubscribeButton from "@/components/student/PushSubscribeButton";
+import NotificationBanner from "@/components/student/NotificationBanner";
 import { speak } from "@/lib/speak";
 import {
   CalendarDays, ClipboardList, BookOpen, BookMarked, PenLine,
@@ -55,6 +56,8 @@ interface Snapshot  { id: string; title: string; created_at: string; }
 interface VocabWord  { id: string; word: string; translation: string; example?: string | null; }
 interface VocabTopic { id: string; title: string; language: string; words: VocabWord[]; }
 
+interface UnreadNotif { id: string; title: string; body: string; }
+
 interface Props {
   studentId: string;
   student: { name: string };
@@ -65,6 +68,7 @@ interface Props {
   articles: Article[];
   snapshots: Snapshot[];
   topics: VocabTopic[];
+  unreadNotifications?: UnreadNotif[];
 }
 
 const TABS = [
@@ -77,7 +81,7 @@ const TABS = [
   { id: "reference", label: "Справочник", Icon: BookMarked    },
 ];
 
-export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics }: Props) {
+export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [] }: Props) {
   const [tab,          setTab]          = useState("lessons");
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
   const canvasRef = useRef<WhiteboardRef>(null);
@@ -120,6 +124,7 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
+      <NotificationBanner studentId={studentId} notifications={unreadNotifications} />
 
       {/* ── Hero ── */}
       <div className="relative overflow-hidden px-5 pt-8 pb-6" style={{ background: theme.gradient }}>
