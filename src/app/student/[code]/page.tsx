@@ -27,10 +27,13 @@ export default async function StudentPage({ params }: Props) {
     { data: snapshots },
     { data: topicsRaw },
     { data: unreadNotifs },
+    { data: tutor },
+    { data: readRows },
+    { data: sentNotifications },
   ] = await Promise.all([
-    supabase.from("lessons").select("*").eq("student_id", student.id)
+    supabase.from("lessons").select("id, scheduled_at, duration_min, notes").eq("student_id", student.id)
       .eq("status", "scheduled").order("scheduled_at"),
-    supabase.from("homework").select("*").eq("student_id", student.id)
+    supabase.from("homework").select("id, title, description, due_date, status").eq("student_id", student.id)
       .in("status", ["pending", "submitted"]).order("due_date"),
     supabase.from("materials").select("*")
       .eq("tutor_id", student.tutor_id)
@@ -50,30 +53,24 @@ export default async function StudentPage({ params }: Props) {
       .select("id, title, language, vocabulary_words(id, word, translation, example)")
       .eq("student_id", student.id)
       .order("created_at", { ascending: false }),
-    // Notification IDs sent to this student
     supabase.from("notification_recipients").select("notification_id")
       .eq("student_id", student.id),
-  ]);
-
-  const [{ data: tutor }, { data: readRows }] = await Promise.all([
     supabase.from("tutors").select("subject").eq("id", student.tutor_id).single(),
     supabase.from("notification_reads").select("notification_id").eq("student_id", student.id),
+    supabase.from("notifications")
+      .select("id, title, body, sent_at")
+      .eq("tutor_id", student.tutor_id)
+      .not("sent_at", "is", null)
+      .order("sent_at", { ascending: false })
+      .limit(20),
   ]);
 
   // Resolve unread notifications
   const recipientIds = new Set((unreadNotifs ?? []).map(r => (r as { notification_id: string }).notification_id));
   const readIds = new Set((readRows ?? []).map(r => r.notification_id));
-  const pendingNotifIds = [...recipientIds].filter(id => !readIds.has(id));
-  let unreadNotifications: { id: string; title: string; body: string }[] = [];
-  if (pendingNotifIds.length > 0) {
-    const { data } = await supabase.from("notifications")
-      .select("id, title, body, sent_at")
-      .in("id", pendingNotifIds)
-      .not("sent_at", "is", null)
-      .eq("tutor_id", student.tutor_id)
-      .order("sent_at", { ascending: false });
-    unreadNotifications = (data ?? []).map(n => ({ id: n.id, title: n.title, body: n.body }));
-  }
+  const unreadNotifications = (sentNotifications ?? [])
+    .filter(n => recipientIds.has(n.id) && !readIds.has(n.id))
+    .map(n => ({ id: n.id, title: n.title, body: n.body }));
 
   // Merge direct + junction-table assigned materials (dedup by id)
   const directIds = new Set((directMaterials ?? []).map(m => m.id));
