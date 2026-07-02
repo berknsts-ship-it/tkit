@@ -13,6 +13,7 @@ export async function createNotification(fields: {
   timezone: string;
   studentIds: string[];
   recurrenceDays?: number[];
+  instant?: boolean;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -27,7 +28,9 @@ export async function createNotification(fields: {
   }
 
   const isRecurring = (fields.recurrenceDays?.length ?? 0) > 0;
-  const scheduledAt = isRecurring
+  const scheduledAt = fields.instant
+    ? new Date().toISOString()
+    : isRecurring
     ? nextOccurrenceUTC(fields.recurrenceDays!, fields.time, fields.timezone)
     : localToUTC(fields.date, fields.time, fields.timezone);
 

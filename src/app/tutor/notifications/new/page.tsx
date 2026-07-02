@@ -32,6 +32,8 @@ const WEEK_DAYS = [
   { label: "Вс", value: 0 },
 ];
 
+type NotifType = "instant" | "once" | "recurring";
+
 interface Student { id: string; name: string; }
 
 export default function NewNotificationPage() {
@@ -41,10 +43,10 @@ export default function NewNotificationPage() {
 
   const [title,        setTitle]        = useState("");
   const [body,         setBody]         = useState("");
+  const [notifType,    setNotifType]    = useState<NotifType>("instant");
   const [date,         setDate]         = useState("");
   const [time,         setTime]         = useState("09:00");
   const [timezone,     setTimezone]     = useState("Europe/Moscow");
-  const [isRecurring,  setIsRecurring]  = useState(false);
   const [recurrDays,   setRecurrDays]   = useState<Set<number>>(new Set());
   const [students,     setStudents]     = useState<Student[]>([]);
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
@@ -79,21 +81,30 @@ export default function NewNotificationPage() {
     e.preventDefault();
     if (!title.trim()) { setError("Укажите заголовок"); return; }
     if (!body.trim())  { setError("Укажите текст"); return; }
-    if (!isRecurring && !date) { setError("Выберите дату"); return; }
-    if (isRecurring && recurrDays.size === 0) { setError("Выберите хотя бы один день"); return; }
+    if (notifType === "once" && !date) { setError("Выберите дату"); return; }
+    if (notifType === "recurring" && recurrDays.size === 0) { setError("Выберите хотя бы один день"); return; }
     setError(null);
 
     const studentIds = allSelected ? [] : [...selectedIds];
-    const recurrenceDays = isRecurring ? [...recurrDays] : undefined;
+    const recurrenceDays = notifType === "recurring" ? [...recurrDays] : undefined;
 
     startTransition(async () => {
-      const res = await createNotification({ title, body, date, time, timezone, studentIds, recurrenceDays });
+      const res = await createNotification({
+        title, body, date, time, timezone, studentIds, recurrenceDays,
+        instant: notifType === "instant",
+      });
       if (res?.error) { setError(res.error); return; }
       router.push("/tutor/notifications");
     });
   };
 
   const inputStyle = { borderColor: "var(--brown-pale)", background: "var(--cream)", color: "var(--brown-dark)" };
+
+  const TYPES: { label: string; val: NotifType }[] = [
+    { label: "Мгновенное", val: "instant"   },
+    { label: "Разовое",    val: "once"      },
+    { label: "Периодически", val: "recurring" },
+  ];
 
   return (
     <div className="max-w-lg">
@@ -107,7 +118,6 @@ export default function NewNotificationPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Заголовок */}
         <div>
           <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
             Заголовок пуш-уведомления
@@ -117,7 +127,6 @@ export default function NewNotificationPage() {
             className="w-full px-4 py-2.5 rounded-xl border outline-none" style={inputStyle} />
         </div>
 
-        {/* Текст */}
         <div>
           <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
             Текст сообщения
@@ -127,34 +136,30 @@ export default function NewNotificationPage() {
             className="w-full px-4 py-2.5 rounded-xl border outline-none resize-none" style={inputStyle} />
         </div>
 
-        {/* Тип: разовое / периодически */}
         <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--brown-mid)" }}>
-            Тип
-          </label>
+          <label className="block text-sm font-medium mb-2" style={{ color: "var(--brown-mid)" }}>Тип</label>
           <div className="flex rounded-xl border overflow-hidden" style={{ borderColor: "var(--brown-pale)" }}>
-            {[
-              { label: "Разовое",       val: false },
-              { label: "Периодически",  val: true  },
-            ].map(opt => (
-              <button key={String(opt.val)} type="button"
-                onClick={() => setIsRecurring(opt.val)}
+            {TYPES.map(opt => (
+              <button key={opt.val} type="button"
+                onClick={() => setNotifType(opt.val)}
                 className="flex-1 py-2 text-sm font-medium transition-all"
-                style={isRecurring === opt.val
+                style={notifType === opt.val
                   ? { background: "var(--gradient-primary)", color: "white" }
                   : { color: "var(--brown-mid)" }}>
                 {opt.label}
               </button>
             ))}
           </div>
+          {notifType === "instant" && (
+            <p className="text-xs mt-1.5" style={{ color: "var(--brown-light)" }}>
+              Уведомление отправится в течение минуты
+            </p>
+          )}
         </div>
 
-        {/* Дни недели — только если периодически */}
-        {isRecurring && (
+        {notifType === "recurring" && (
           <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: "var(--brown-mid)" }}>
-              Дни недели
-            </label>
+            <label className="block text-sm font-medium mb-2" style={{ color: "var(--brown-mid)" }}>Дни недели</label>
             <div className="flex gap-2 flex-wrap">
               {WEEK_DAYS.map(({ label, value }) => (
                 <button key={value} type="button" onClick={() => toggleDay(value)}
@@ -169,8 +174,7 @@ export default function NewNotificationPage() {
           </div>
         )}
 
-        {/* Дата — только если разовое */}
-        {!isRecurring && (
+        {notifType === "once" && (
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>Дата</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
@@ -178,23 +182,23 @@ export default function NewNotificationPage() {
           </div>
         )}
 
-        {/* Время и часовой пояс */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>Время</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border outline-none" style={inputStyle} />
+        {notifType !== "instant" && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>Время</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>Часовой пояс</label>
+              <select value={timezone} onChange={e => setTimezone(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border outline-none" style={inputStyle}>
+                {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>Часовой пояс</label>
-            <select value={timezone} onChange={e => setTimezone(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border outline-none" style={inputStyle}>
-              {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
-            </select>
-          </div>
-        </div>
+        )}
 
-        {/* Получатели */}
         <div>
           <label className="block text-sm font-medium mb-2" style={{ color: "var(--brown-mid)" }}>Получатели</label>
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--brown-pale)" }}>
@@ -233,7 +237,7 @@ export default function NewNotificationPage() {
           className="w-full py-3 rounded-xl font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-60"
           style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-button)" }}>
           <Bell size={16} />
-          {pending ? "Создаём..." : "Создать уведомление"}
+          {pending ? "Создаём..." : notifType === "instant" ? "Отправить сейчас" : "Создать уведомление"}
         </button>
       </form>
     </div>
