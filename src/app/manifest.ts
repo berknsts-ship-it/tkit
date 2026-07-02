@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "T-Kit",
     description: "Платформа для репетиторов",
     start_url: "/tutor/dashboard",
-    scope: "/",
+    scope: "/tutor/",
     display: "standalone",
     orientation: "portrait",
     background_color: "#3D0C15",
