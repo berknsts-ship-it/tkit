@@ -22,18 +22,22 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
   const subscribe = async () => {
     setState("loading");
     try {
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidKey) { console.error("[push] NEXT_PUBLIC_VAPID_PUBLIC_KEY not set"); setState("unsubscribed"); return; }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+        applicationServerKey: vapidKey,
       });
-      await fetch("/api/push", {
+      const res = await fetch("/api/push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ studentId, subscription: sub.toJSON() }),
       });
+      console.log("[push] saved subscription, status:", res.status);
       setState("subscribed");
-    } catch {
+    } catch (err) {
+      console.error("[push] subscribe error:", err);
       setState(Notification.permission === "denied" ? "denied" : "unsubscribed");
     }
   };
@@ -53,7 +57,13 @@ export default function PushSubscribeButton({ studentId }: { studentId: string }
     setState("unsubscribed");
   };
 
-  if (state === "loading" || state === "unsupported") return null;
+  if (state === "unsupported") return null;
+  if (state === "loading") return (
+    <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl opacity-40"
+      style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}>
+      <Bell size={13}/> Уведомления
+    </div>
+  );
 
   if (state === "denied") return (
     <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
