@@ -114,6 +114,13 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser }: { tutorNam
                 </Link>
               );
             })}
+            {isCreatorUser && (
+              <Link href="/creator" onClick={() => setOpen(false)}
+                className="text-base font-medium px-4 py-3 rounded-xl mt-2"
+                style={{ color: "var(--brown-mid)", background: "var(--brown-pale)" }}>
+                👀 Панель создателя
+              </Link>
+            )}
             {!isPro && (
               <Link href="/tutor/subscription" onClick={() => setOpen(false)}
                 className="text-base font-semibold px-4 py-3 rounded-xl text-white mt-2"

@@ -25,9 +25,10 @@ export default async function TutorLayout({ children }: { children: React.ReactN
     .single();
 
   const isPro =
-    tutor?.plan === "pro" &&
+    isCreator(user.email) ||
+    (tutor?.plan === "pro" &&
     tutor?.plan_expires_at &&
-    new Date(tutor.plan_expires_at) > new Date();
+    new Date(tutor.plan_expires_at) > new Date());
 
   const themeKey = getThemeKey(tutor?.subject);
   const t = THEMES[themeKey];
