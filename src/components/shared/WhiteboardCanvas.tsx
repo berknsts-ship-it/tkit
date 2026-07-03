@@ -1065,6 +1065,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [editWheelText, setEditWheelText] = useState("");
   const [showMoreTools, setShowMoreTools] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const shapeMenuAnchorRef  = useRef<HTMLDivElement>(null);
+  const frameMenuAnchorRef  = useRef<HTMLDivElement>(null);
+  const moreToolsAnchorRef  = useRef<HTMLDivElement>(null);
+  const [shapeMenuPos,  setShapeMenuPos]  = useState<{ top: number; left: number } | null>(null);
+  const [frameMenuPos,  setFrameMenuPos]  = useState<{ top: number; left: number } | null>(null);
+  const [moreToolsPos,  setMoreToolsPos]  = useState<{ top: number; left: number } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState("");
   const [pendingSymbol, setPendingSymbol]   = useState<string | null>(null);
@@ -2696,7 +2702,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
       {/* Vertical sidebar */}
       <aside className="hidden sm:flex flex-col items-center gap-1 py-2 border-r shrink-0 relative transition-all duration-200"
-        style={{ width: sidebarCollapsed ? 0 : 52, overflow: sidebarCollapsed ? "hidden" : "visible", borderColor:"var(--brown-pale)", background:"white" }}>
+        style={{ width: sidebarCollapsed ? 0 : 52, overflowX: "visible", overflowY: sidebarCollapsed ? "hidden" : "auto", borderColor:"var(--brown-pale)", background:"white" }}>
         <SideBtn active={tool==="select"} onClick={()=>pickTool("select")} title="Выбор [V]"><Pointer size={16}/></SideBtn>
         <SideBtn active={tool==="hand"} onClick={()=>pickTool("hand")} title="Рука [H]"><Hand size={16}/></SideBtn>
         <div className="w-8 h-px mx-auto my-1" style={{ background:"var(--brown-pale)" }}/>
@@ -2707,13 +2713,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         <SideBtn active={tool==="laser"} onClick={()=>pickTool("laser")} title="Указка [L]"><MousePointer2 size={16}/></SideBtn>
         <div className="w-8 h-px mx-auto my-1" style={{ background:"var(--brown-pale)" }}/>
         {/* Shape with submenu */}
-        <div className="relative">
-          <SideBtn active={tool==="shape"} onClick={()=>{closeSidePanels(); setTool("shape"); setShowShapeMenu(m=>!m);}} title="Фигуры [S]">
+        <div className="relative" ref={shapeMenuAnchorRef}>
+          <SideBtn active={tool==="shape"} onClick={()=>{
+            const r = shapeMenuAnchorRef.current?.getBoundingClientRect();
+            if (r) setShapeMenuPos({ top: r.top, left: r.right + 8 });
+            closeSidePanels(); setTool("shape"); setShowShapeMenu(m=>!m);
+          }} title="Фигуры [S]">
             <Shapes size={16}/>
           </SideBtn>
-          {showShapeMenu && (
-            <div className="absolute left-full top-0 ml-2 z-[80] rounded-xl border shadow-lg flex flex-col"
-              style={{ background:"white", borderColor:"var(--brown-pale)", width:220, maxHeight:360 }}
+          {showShapeMenu && shapeMenuPos && (
+            <div className="fixed z-[80] rounded-xl border shadow-lg flex flex-col"
+              style={{ background:"white", borderColor:"var(--brown-pale)", width:220, maxHeight:360, top: shapeMenuPos.top, left: shapeMenuPos.left }}
               onMouseDown={e => e.stopPropagation()}>
               <div className="overflow-y-auto flex-1 p-1.5">
               {SHAPE_KINDS.map(k => (
@@ -2735,13 +2745,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           )}
         </div>
         {/* Frame with submenu */}
-        <div className="relative">
-          <SideBtn active={tool==="frame"} onClick={()=>{closeSidePanels(); setTool("frame"); setShowFrameMenu(m=>!m);}} title="Блок/фрейм [F]">
+        <div className="relative" ref={frameMenuAnchorRef}>
+          <SideBtn active={tool==="frame"} onClick={()=>{
+            const r = frameMenuAnchorRef.current?.getBoundingClientRect();
+            if (r) setFrameMenuPos({ top: r.top, left: r.right + 8 });
+            closeSidePanels(); setTool("frame"); setShowFrameMenu(m=>!m);
+          }} title="Блок/фрейм [F]">
             <LayoutTemplate size={16}/>
           </SideBtn>
-          {showFrameMenu && (
-            <div className="absolute left-full top-0 ml-2 z-50 rounded-xl border shadow-lg p-1.5 w-52"
-              style={{ background:"white", borderColor:"var(--brown-pale)" }}>
+          {showFrameMenu && frameMenuPos && (
+            <div className="fixed z-50 rounded-xl border shadow-lg p-1.5 w-52"
+              style={{ background:"white", borderColor:"var(--brown-pale)", top: frameMenuPos.top, left: frameMenuPos.left }}>
               {FRAME_SHAPES.map(k => (
                 <button key={k.v} onClick={()=>{setFrameShape(k.v);setShowFrameMenu(false);setTool("frame");}}
                   className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm w-full text-left hover:opacity-70"
@@ -2760,13 +2774,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         <div className="flex-1"/>
         {/* More tools at bottom */}
         <div className="w-8 h-px mx-auto mb-1" style={{ background:"var(--brown-pale)" }}/>
-        <div className="relative">
-          <SideBtn active={showMoreTools} onClick={()=>setShowMoreTools(v=>!v)} title="Ещё инструменты">
+        <div className="relative" ref={moreToolsAnchorRef}>
+          <SideBtn active={showMoreTools} onClick={()=>{
+            const r = moreToolsAnchorRef.current?.getBoundingClientRect();
+            if (r) setMoreToolsPos({ top: r.top, left: r.right + 8 });
+            setShowMoreTools(v=>!v);
+          }} title="Ещё инструменты">
             <span className="text-lg font-bold leading-none">+</span>
           </SideBtn>
-          {showMoreTools && (
-            <div className="absolute left-full bottom-0 ml-2 z-50 rounded-2xl border shadow-xl overflow-hidden"
-              style={{ background:"white", borderColor:"var(--brown-pale)", width:260 }}>
+          {showMoreTools && moreToolsPos && (
+            <div className="fixed z-50 rounded-2xl border shadow-xl overflow-hidden"
+              style={{ background:"white", borderColor:"var(--brown-pale)", width:260, top: moreToolsPos.top, left: moreToolsPos.left }}>
               <div className="px-3 py-2 text-xs font-medium border-b" style={{ color:"var(--brown-mid)", borderColor:"var(--brown-pale)" }}>Ещё инструменты</div>
               <div className="p-2 grid grid-cols-3 gap-1.5">
                 {/* Symbols */}
