@@ -1070,7 +1070,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const moreToolsAnchorRef  = useRef<HTMLDivElement>(null);
   const [shapeMenuPos,  setShapeMenuPos]  = useState<{ top: number; left: number } | null>(null);
   const [frameMenuPos,  setFrameMenuPos]  = useState<{ top: number; left: number } | null>(null);
-  const [moreToolsPos,  setMoreToolsPos]  = useState<{ top: number; left: number } | null>(null);
+  const [moreToolsPos,  setMoreToolsPos]  = useState<{ top?: number; bottom?: number; left: number } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState("");
   const [pendingSymbol, setPendingSymbol]   = useState<string | null>(null);
@@ -2722,7 +2722,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             <Shapes size={16}/>
           </SideBtn>
           {showShapeMenu && shapeMenuPos && (
-            <div className="fixed z-[80] rounded-xl border shadow-lg flex flex-col"
+            <div className="fixed z-[10000] rounded-xl border shadow-lg flex flex-col"
               style={{ background:"white", borderColor:"var(--brown-pale)", width:220, maxHeight:360, top: shapeMenuPos.top, left: shapeMenuPos.left }}
               onMouseDown={e => e.stopPropagation()}>
               <div className="overflow-y-auto flex-1 p-1.5">
@@ -2754,7 +2754,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             <LayoutTemplate size={16}/>
           </SideBtn>
           {showFrameMenu && frameMenuPos && (
-            <div className="fixed z-50 rounded-xl border shadow-lg p-1.5 w-52"
+            <div className="fixed z-[10000] rounded-xl border shadow-lg p-1.5 w-52"
               style={{ background:"white", borderColor:"var(--brown-pale)", top: frameMenuPos.top, left: frameMenuPos.left }}>
               {FRAME_SHAPES.map(k => (
                 <button key={k.v} onClick={()=>{setFrameShape(k.v);setShowFrameMenu(false);setTool("frame");}}
@@ -2777,14 +2777,21 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         <div className="relative" ref={moreToolsAnchorRef}>
           <SideBtn active={showMoreTools} onClick={()=>{
             const r = moreToolsAnchorRef.current?.getBoundingClientRect();
-            if (r) setMoreToolsPos({ top: r.top, left: r.right + 8 });
+            if (r) {
+              const dropH = 300;
+              if (r.top + dropH > window.innerHeight) {
+                setMoreToolsPos({ bottom: window.innerHeight - r.bottom, left: r.right + 8 });
+              } else {
+                setMoreToolsPos({ top: r.top, left: r.right + 8 });
+              }
+            }
             setShowMoreTools(v=>!v);
           }} title="Ещё инструменты">
             <span className="text-lg font-bold leading-none">+</span>
           </SideBtn>
           {showMoreTools && moreToolsPos && (
-            <div className="fixed z-50 rounded-2xl border shadow-xl overflow-hidden"
-              style={{ background:"white", borderColor:"var(--brown-pale)", width:260, top: moreToolsPos.top, left: moreToolsPos.left }}>
+            <div className="fixed z-[10000] rounded-2xl border shadow-xl overflow-hidden"
+              style={{ background:"white", borderColor:"var(--brown-pale)", width:260, top: moreToolsPos.top, bottom: moreToolsPos.bottom, left: moreToolsPos.left }}>
               <div className="px-3 py-2 text-xs font-medium border-b" style={{ color:"var(--brown-mid)", borderColor:"var(--brown-pale)" }}>Ещё инструменты</div>
               <div className="p-2 grid grid-cols-3 gap-1.5">
                 {/* Symbols */}
