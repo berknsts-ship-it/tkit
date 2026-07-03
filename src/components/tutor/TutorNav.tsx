@@ -9,6 +9,8 @@ import { Menu, X } from "lucide-react";
 import TKitLogo from "@/components/TKitLogo";
 import { SupportChatButton } from "@/components/SupportChat";
 
+const LANGUAGE_SUBJECT = "Иностранный язык";
+
 const navLinks = [
   { href: "/tutor/dashboard",      label: "Главная" },
   { href: "/tutor/students",       label: "Ученики" },
@@ -17,11 +19,14 @@ const navLinks = [
   { href: "/tutor/materials",      label: "Материалы" },
   { href: "/tutor/notifications",  label: "Уведомления" },
   { href: "/tutor/board",          label: "Доска" },
+  { href: "/tutor/trainer",        label: "Тренажер",   proOnly: true },
   { href: "/tutor/reference",      label: "Справочник", proOnly: true },
-  { href: "/tutor/vocabulary",     label: "Словарь",    proOnly: true },
+  { href: "/tutor/vocabulary",     label: "Словарь",    proOnly: true, languageOnly: true },
 ];
 
-export default function TutorNav({ tutorName, isPro, isCreatorUser }: { tutorName: string; isPro: boolean; isCreatorUser?: boolean }) {
+export default function TutorNav({ tutorName, isPro, isCreatorUser, subject }: {
+  tutorName: string; isPro: boolean; isCreatorUser?: boolean; subject?: string | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -32,7 +37,10 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser }: { tutorNam
     router.push("/auth/login");
   }
 
-  const visibleLinks = navLinks.filter(l => !l.proOnly || isPro);
+  const isLanguage = subject === LANGUAGE_SUBJECT;
+  const visibleLinks = navLinks.filter(l =>
+    (!l.proOnly || isPro) && (!l.languageOnly || isLanguage)
+  );
 
   return (
     <>

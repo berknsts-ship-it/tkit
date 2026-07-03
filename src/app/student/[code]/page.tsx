@@ -90,6 +90,46 @@ export default async function StudentPage({ params }: Props) {
     a.reference_article_students.some((r: { student_id: string }) => r.student_id === student.id)
   );
 
+  // Fetch trainer decks in two steps: assignments → cards
+  type TrainerDeckData = {
+    id: string;
+    title: string;
+    subject: string | null;
+    description: string | null;
+    cards: { id: string; deck_id: string; type: string; front: string; back: string; options: string[] | null }[];
+  };
+  let trainerDecks: TrainerDeckData[] = [];
+
+  const { data: trainerAssignments } = await supabase
+    .from("trainer_assignments")
+    .select("deck_id, trainer_decks(id, title, subject, description)")
+    .eq("student_id", student.id);
+
+  if (trainerAssignments && trainerAssignments.length > 0) {
+    const deckIds = trainerAssignments.map(a => a.deck_id).filter(Boolean);
+    if (deckIds.length > 0) {
+      const { data: trainerCards } = await supabase
+        .from("trainer_cards")
+        .select("id, deck_id, type, front, back, options")
+        .in("deck_id", deckIds)
+        .order("position");
+
+      trainerDecks = trainerAssignments
+        .map(a => {
+          const deck = a.trainer_decks as unknown as { id: string; title: string; subject: string | null; description: string | null } | null;
+          if (!deck) return null;
+          return {
+            id: deck.id,
+            title: deck.title,
+            subject: deck.subject,
+            description: deck.description,
+            cards: (trainerCards ?? []).filter(c => c.deck_id === deck.id),
+          };
+        })
+        .filter((d): d is TrainerDeckData => d !== null);
+    }
+  }
+
   return (
     <StudentCabinet
       studentId={student.id}
@@ -105,6 +145,7 @@ export default async function StudentPage({ params }: Props) {
         id: t.id, title: t.title, language: t.language ?? "en-US",
         words: (t.vocabulary_words ?? []) as { id: string; word: string; translation: string; example?: string | null }[],
       }))}
+      trainerDecks={trainerDecks}
     />
   );
 }

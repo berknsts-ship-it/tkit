@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import StudentMaterials from "./StudentMaterials";
 import MarkdownContent from "@/components/shared/MarkdownContent";
+import TrainerPractice, { type TrainerCard } from "@/components/trainer/TrainerPractice";
 
 // ─── Темы по предмету ───────────────────────────────────────────────────────
 const SUBJECT_THEME: Record<string, { gradient: string; icons: React.ElementType[] }> = {
@@ -58,6 +59,14 @@ interface VocabTopic { id: string; title: string; language: string; words: Vocab
 
 interface UnreadNotif { id: string; title: string; body: string; }
 
+interface TrainerDeck {
+  id: string;
+  title: string;
+  subject: string | null;
+  description: string | null;
+  cards: { id: string; deck_id: string; type: string; front: string; back: string; options: string[] | null }[];
+}
+
 interface Props {
   studentId: string;
   student: { name: string };
@@ -69,6 +78,7 @@ interface Props {
   snapshots: Snapshot[];
   topics: VocabTopic[];
   unreadNotifications?: UnreadNotif[];
+  trainerDecks?: TrainerDeck[];
 }
 
 const TABS = [
@@ -81,7 +91,7 @@ const TABS = [
   { id: "reference", label: "Справочник", Icon: BookMarked    },
 ];
 
-export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [] }: Props) {
+export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [] }: Props) {
   const [tab,          setTab]          = useState("lessons");
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
   const canvasRef = useRef<WhiteboardRef>(null);
@@ -266,7 +276,14 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
           )
         )}
 
-        {tab === "trainer" && <VocabTrainer topics={topics} />}
+        {tab === "trainer" && (
+          <TrainerSection
+            studentId={studentId}
+            subject={subject}
+            topics={topics}
+            trainerDecks={trainerDecks}
+          />
+        )}
 
         {tab === "materials" && (materials.length === 0
           ? <EmptyState icon="📚" title="Материалов пока нет" sub="Здесь появятся учебники и файлы от репетитора" />
@@ -386,6 +403,76 @@ function plural(n: number, one: string, few: string, many: string) {
   if (m10 === 1 && m100 !== 11) return one;
   if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
   return many;
+}
+
+function TrainerSection({
+  studentId, subject, topics, trainerDecks,
+}: {
+  studentId: string;
+  subject: string | null;
+  topics: VocabTopic[];
+  trainerDecks: TrainerDeck[];
+}) {
+  const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
+  const isLanguage = subject === "Иностранный язык";
+
+  if (selectedDeckId) {
+    const deck = trainerDecks.find(d => d.id === selectedDeckId);
+    return (
+      <div>
+        <button
+          onClick={() => setSelectedDeckId(null)}
+          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border mb-4"
+          style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
+          <ArrowLeft size={13} /> Назад
+        </button>
+        <p className="font-semibold mb-4" style={{ color: "var(--brown-dark)" }}>{deck?.title}</p>
+        <TrainerPractice
+          deckId={selectedDeckId}
+          cards={(deck?.cards ?? []) as TrainerCard[]}
+          studentId={studentId}
+          onDone={() => setSelectedDeckId(null)}
+        />
+      </div>
+    );
+  }
+
+  const hasDecks = trainerDecks.length > 0;
+  const hasVocab = isLanguage && topics.length > 0;
+
+  if (!hasDecks && !hasVocab) {
+    return <EmptyState icon="🏋️" title="Тренажёр пуст" sub="Репетитор ещё не назначил тебе задания" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {trainerDecks.map(deck => (
+        <button key={deck.id}
+          onClick={() => setSelectedDeckId(deck.id)}
+          className="w-full text-left rounded-xl border p-4 bg-white hover:opacity-80 transition-all flex items-center justify-between"
+          style={{ borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" }}>
+          <div>
+            <div className="font-medium" style={{ color: "var(--brown-dark)" }}>{deck.title}</div>
+            <div className="text-sm mt-0.5" style={{ color: "var(--brown-light)" }}>
+              {deck.subject ? `${deck.subject} · ` : ""}{deck.cards.length} {plural(deck.cards.length, "карточка", "карточки", "карточек")}
+            </div>
+          </div>
+          <ArrowRight size={16} style={{ color: "var(--brown-light)" }} />
+        </button>
+      ))}
+
+      {isLanguage && topics.length > 0 && (
+        <div>
+          {trainerDecks.length > 0 && (
+            <p className="text-xs font-medium mb-2 mt-4 uppercase tracking-wider" style={{ color: "var(--brown-light)" }}>
+              Словарь
+            </p>
+          )}
+          <VocabTrainer topics={topics} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function VocabTrainer({ topics }: { topics: VocabTopic[] }) {

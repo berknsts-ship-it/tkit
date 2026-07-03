@@ -65,7 +65,7 @@ export default async function TutorLayout({ children }: { children: React.ReactN
         </div>
       )}
 
-      <TutorNav tutorName={tutor?.name ?? user.email ?? "Репетитор"} isPro={!!isPro} isCreatorUser={isCreator(user.email)} />
+      <TutorNav tutorName={tutor?.name ?? user.email ?? "Репетитор"} isPro={!!isPro} isCreatorUser={isCreator(user.email)} subject={tutor?.subject} />
 
       <main className="relative z-10 flex-1 max-w-5xl mx-auto w-full px-4 py-6">
         {children}
