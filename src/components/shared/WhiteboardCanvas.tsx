@@ -2822,8 +2822,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       <div className="flex flex-col flex-1 overflow-hidden">
 
         {/* Context bar — tool options */}
-        <div className="hidden sm:flex items-center gap-2 px-2 py-1.5 border-b shrink-0 flex-wrap"
+        <div className="hidden sm:flex items-center border-b shrink-0"
           style={{ borderColor:"var(--brown-pale)", background:"white", minHeight:44 }}>
+
+          {/* Left: sidebar toggle + tool-specific options, scrolls horizontally */}
+          <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto flex-1 min-w-0">
 
           {/* Sidebar toggle */}
           <button onClick={() => setSidebarCollapsed(v => !v)}
@@ -2950,8 +2953,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             </div>
           </>)}
 
-          {/* Right side: ruling + pdf + zoom + undo/redo + clear */}
-          <div className="ml-auto flex items-center gap-1 shrink-0">
+          </div>{/* end left scrollable zone */}
+
+          {/* Right side: ruling + pdf + zoom + undo/redo + clear — always visible */}
+          <div className="flex items-center gap-1 px-2 py-1.5 shrink-0 border-l" style={{ borderColor:"var(--brown-pale)" }}>
             <button onClick={undo} disabled={!canUndo} title="Ctrl+Z" className="p-1.5 rounded-lg border disabled:opacity-25" style={{ borderColor:"var(--brown-pale)" }}><Undo2 size={14} style={{ color:"var(--brown-dark)" }}/></button>
             <button onClick={redo} disabled={!canRedo} title="Ctrl+Y" className="p-1.5 rounded-lg border disabled:opacity-25" style={{ borderColor:"var(--brown-pale)" }}><Redo2 size={14} style={{ color:"var(--brown-dark)" }}/></button>
             <Sep/>
