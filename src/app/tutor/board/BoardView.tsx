@@ -186,8 +186,8 @@ export default function BoardView({
           : "flex flex-1 overflow-hidden"
         }>
           {/* Canvas area */}
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+          <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
+            <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative" style={{ minHeight: "40vh" }}>
               <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="tutor" materials={materials} />
               {/* Fullscreen toggle */}
               <button
