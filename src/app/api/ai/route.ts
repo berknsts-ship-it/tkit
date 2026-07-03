@@ -41,6 +41,26 @@ const systemPrompts: Record<string, string> = {
 - example: короткое живое предложение с этим словом (на языке оригинала)
 - 6–12 карточек если не указано количество
 - Только JSON, никакого текста вокруг`,
+
+  trainer_cards: `Ты помощник репетитора. Создай набор учебных карточек для тренажёра по описанию пользователя.
+Верни ТОЛЬКО валидный JSON-массив без markdown и без объяснений.
+
+Типы карточек:
+- flashcard: вопрос или термин (front) → ответ или определение (back). options: []
+- match: левая часть пары (front) → правая часть (back). options: []. Добавь 5–8 пар для одной темы.
+- definition: термин (front) → правильное определение (back) + три неверных варианта в options.
+
+Формат:
+[{"type":"flashcard","front":"...","back":"...","options":[]},
+ {"type":"match","front":"...","back":"...","options":[]},
+ {"type":"definition","front":"...","back":"...","options":["неверный1","неверный2","неверный3"]}]
+
+Правила:
+- 6–12 карточек если не указано иное
+- Если пользователь указал конкретный тип — создай только его
+- front и back — короткие и ёмкие, без лишних слов
+- Для definition: options — строго 3 неверных варианта, правдоподобных но отличных от правильного
+- Только JSON, никакого текста вокруг`,
 };
 
 export async function POST(req: NextRequest) {
@@ -55,7 +75,7 @@ export async function POST(req: NextRequest) {
   const model = (mode === "vocabulary_example" || mode === "vocabulary_hint")
     ? "llama-3.1-8b-instant"
     : "llama-3.3-70b-versatile";
-  const maxTokens = mode === "vocabulary_set" ? 1000 : mode === "reference" ? 1000 : 400;
+  const maxTokens = mode === "trainer_cards" ? 1800 : mode === "vocabulary_set" ? 1000 : mode === "reference" ? 1000 : 400;
 
   const res = await fetch(GROQ_API, {
     method: "POST",

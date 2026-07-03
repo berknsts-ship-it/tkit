@@ -123,6 +123,40 @@ export async function deleteCard(cardId: string, deckId: string) {
   revalidatePath(`/tutor/trainer/${deckId}`);
 }
 
+export async function bulkAddCards(
+  deckId: string,
+  cards: { type: string; front: string; back: string; options: string[] }[],
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Не авторизован" };
+
+  const db = createAdminClient();
+
+  const { data: last } = await db
+    .from("trainer_cards")
+    .select("position")
+    .eq("deck_id", deckId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const basePos = (last?.position ?? -1) + 1;
+  const rows = cards.map((c, i) => ({
+    deck_id: deckId,
+    type: c.type,
+    front: c.front,
+    back: c.back,
+    options: c.options.length > 0 ? c.options : null,
+    position: basePos + i,
+  }));
+
+  const { error } = await db.from("trainer_cards").insert(rows);
+  if (error) return { error: error.message };
+  revalidatePath(`/tutor/trainer/${deckId}`);
+  return { ok: true };
+}
+
 // ── Assignments ────────────────────────────────────────────────────────────
 
 export async function assignDeck(deckId: string, studentIds: string[]) {

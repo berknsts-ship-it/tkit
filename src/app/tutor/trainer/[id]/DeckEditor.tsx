@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { addCard, deleteCard, assignDeck, deleteDeck } from "@/app/actions/trainer";
-import { Trash2, Plus, Play, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { addCard, deleteCard, assignDeck, deleteDeck, bulkAddCards } from "@/app/actions/trainer";
+import { Trash2, Plus, Play, Users, ChevronDown, ChevronUp, Sparkles, Check as CheckIcon } from "lucide-react";
 
 type Card = { id: string; type: string; front: string; back: string; options: string[] | null };
 type Student = { id: string; name: string };
@@ -43,6 +43,17 @@ export default function DeckEditor({
   const [saved,   setSaved]   = useState(false);
   const [showProg, setShowProg] = useState(false);
 
+  // AI generation state
+  const [showAi,     setShowAi]     = useState(false);
+  const [aiPrompt,   setAiPrompt]   = useState("");
+  const [aiType,     setAiType]     = useState("");
+  const [aiLoading,  setAiLoading]  = useState(false);
+  const [aiError,    setAiError]    = useState<string | null>(null);
+  type AiCard = { type: string; front: string; back: string; options: string[] };
+  const [aiCards,    setAiCards]    = useState<AiCard[]>([]);
+  const [aiSel,      setAiSel]      = useState<Set<number>>(new Set());
+  const [aiAdding,   startAiAdd]    = useTransition();
+
   function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!front.trim() || !back.trim()) { setAddErr("Заполните оба поля"); return; }
@@ -77,6 +88,41 @@ export default function DeckEditor({
     startDel(async () => { await deleteCard(cardId, deckId); });
   }
 
+  async function handleAiGenerate() {
+    if (!aiPrompt.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiCards([]);
+    setAiSel(new Set());
+    const typeHint = aiType ? `, тип карточек: ${TYPE_LABELS[aiType]}` : "";
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: aiPrompt + typeHint, mode: "trainer_cards" }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { setAiError(data.error ?? "Ошибка"); setAiLoading(false); return; }
+    try {
+      const parsed: AiCard[] = JSON.parse(data.text);
+      const valid = parsed.filter(c => c.type && c.front && c.back);
+      setAiCards(valid);
+      setAiSel(new Set(valid.map((_, i) => i)));
+    } catch {
+      setAiError("ИИ вернул некорректный ответ. Попробуйте снова.");
+    }
+    setAiLoading(false);
+  }
+
+  function handleAiAdd() {
+    const selected = aiCards.filter((_, i) => aiSel.has(i));
+    if (selected.length === 0) return;
+    startAiAdd(async () => {
+      const res = await bulkAddCards(deckId, selected);
+      if (res?.error) setAiError(res.error);
+      else { setAiCards([]); setAiSel(new Set()); setAiPrompt(""); setShowAi(false); }
+    });
+  }
+
   // Progress per student
   const studentsWithProgress = students.map(s => {
     const rows = progress.filter(p => p.student_id === s.id);
@@ -93,6 +139,107 @@ export default function DeckEditor({
 
   return (
     <div className="space-y-6">
+
+      {/* AI generation */}
+      <div className="rounded-2xl border overflow-hidden bg-white" style={{ borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" }}>
+        <button onClick={() => setShowAi(o => !o)}
+          className="w-full flex items-center gap-2 px-5 py-3.5 text-left"
+          style={{ color: "var(--brown-dark)" }}>
+          <Sparkles size={16} style={{ color: "#b07040" }} />
+          <span className="font-semibold text-sm">Сгенерировать карточки с ИИ</span>
+          <span className="ml-auto">{showAi ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
+        </button>
+
+        {showAi && (
+          <div className="px-5 pb-5 pt-1 border-t space-y-3" style={{ borderColor: "var(--brown-pale)" }}>
+            <textarea
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              placeholder={"Опишите тему: «Клетка и органоиды, 8 пар для сопоставления» или «Даты Великой Отечественной, карточки»"}
+              rows={3}
+              className={inp}
+              style={{ ...inpS, resize: "none" }}
+            />
+
+            {/* Type hint */}
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-xs self-center" style={{ color: "var(--brown-light)" }}>Тип:</span>
+              {([["", "Авто"], ["flashcard", "Карточки"], ["match", "Сопоставление"], ["definition", "Тест"]] as const).map(([val, label]) => (
+                <button key={val} type="button" onClick={() => setAiType(val)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all"
+                  style={{
+                    borderColor: aiType === val ? "var(--brown-dark)" : "var(--brown-pale)",
+                    background:  aiType === val ? "var(--brown-pale)" : "transparent",
+                    color: "var(--brown-dark)",
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={handleAiGenerate} disabled={aiLoading || !aiPrompt.trim()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: "var(--gradient-primary)" }}>
+              <Sparkles size={14} />
+              {aiLoading ? "Генерирую..." : "Сгенерировать"}
+            </button>
+
+            {aiError && <p className="text-xs" style={{ color: "#c06040" }}>{aiError}</p>}
+
+            {aiCards.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium" style={{ color: "var(--brown-mid)" }}>
+                    {aiCards.length} карточек сгенерировано — выберите нужные:
+                  </p>
+                  <button onClick={() => setAiSel(aiSel.size === aiCards.length ? new Set() : new Set(aiCards.map((_, i) => i)))}
+                    className="text-xs" style={{ color: "var(--brown-mid)" }}>
+                    {aiSel.size === aiCards.length ? "Снять все" : "Выбрать все"}
+                  </button>
+                </div>
+
+                <div className="divide-y rounded-xl border overflow-hidden" style={{ borderColor: "var(--brown-pale)" }}>
+                  {aiCards.map((c, i) => (
+                    <label key={i}
+                      className="flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-all"
+                      style={{ background: aiSel.has(i) ? "var(--brown-pale)" : "white" }}>
+                      <input type="checkbox" checked={aiSel.has(i)}
+                        onChange={() => setAiSel(prev => {
+                          const n = new Set(prev);
+                          n.has(i) ? n.delete(i) : n.add(i);
+                          return n;
+                        })}
+                        className="mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            style={{ background: "rgba(0,0,0,0.06)", color: "var(--brown-mid)" }}>
+                            {TYPE_LABELS[c.type] ?? c.type}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium truncate" style={{ color: "var(--brown-dark)" }}>{c.front}</p>
+                        <p className="text-sm truncate" style={{ color: "var(--brown-light)" }}>{c.back}</p>
+                        {c.options.length > 0 && (
+                          <p className="text-xs truncate" style={{ color: "var(--brown-light)" }}>
+                            Варианты: {c.options.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <button onClick={handleAiAdd} disabled={aiAdding || aiSel.size === 0}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: "var(--gradient-primary)" }}>
+                  <CheckIcon size={14} />
+                  {aiAdding ? "Добавляем..." : `Добавить ${aiSel.size} карточек`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Add card form */}
       <div className="rounded-2xl border p-5 bg-white" style={{ borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" }}>
