@@ -56,7 +56,7 @@ export default async function BoardPage({ searchParams }: Props) {
   const activeStudent = students.find(s => s.id === studentId);
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100dvh - 56px)" }}>
+    <div className="-mx-4 -my-6 flex flex-col" style={{ height: "calc(100dvh - 56px)" }}>
       {/* Шапка */}
       <div className="flex items-center border-b shrink-0"
         style={{ borderColor: "var(--brown-pale)", background: "white" }}>
