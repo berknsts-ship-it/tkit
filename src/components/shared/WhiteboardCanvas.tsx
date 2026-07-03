@@ -1383,44 +1383,63 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   // ── Realtime ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient();
-    const ch = supabase
-      .channel(`board-${roomId}`, { config: { broadcast: { self: false } } })
-      .on("broadcast", { event: "draw" }, ({ payload }: { payload: WsEvent }) => {
-        if (payload.type === "clear")     { itemsRef.current = []; remotePathsRef.current.clear(); render(); return; }
-        if (payload.type === "pdf_clear") { pdfOffscreen.current = null; render(); setPdf(null); return; }
-        if (payload.type === "pdf_page")  { loadPdfPage(payload.pdfUrl, "", payload.pdfPage); return; }
-        if (payload.type === "viewport")  { applyView(payload.zoom, payload.panX, payload.panY); return; }
-        if (payload.type === "ruling")    { setRuling(payload.ruling); return; }
-        if (payload.type === "laser") {
-          setLaserPos({ x: payload.x, y: payload.y });
-          if (laserTimer.current) clearTimeout(laserTimer.current);
-          laserTimer.current = setTimeout(() => setLaserPos(null), 2500); return;
-        }
-        if (payload.type === "cursor") {
-          setRemoteCursor({ x: payload.x, y: payload.y });
-          if (remoteCursorTimer.current) clearTimeout(remoteCursorTimer.current);
-          remoteCursorTimer.current = setTimeout(() => setRemoteCursor(null), 3000); return;
-        }
-        if (payload.type === "path-pt") {
-          const { id, x, y, color, size, eraser, highlight } = payload;
-          const existing = remotePathsRef.current.get(id);
-          if (existing) { existing.points.push({ x, y }); }
-          else { remotePathsRef.current.set(id, { type:"path", id, points:[{x,y}], color, size, eraser, highlight }); }
-          render(); return;
-        }
-        if (payload.type === "path") {
-          remotePathsRef.current.delete(payload.item.id);
-          itemsRef.current.push(payload.item); render(); return;
-        }
-        if (payload.type === "update") {
-          const idx = itemsRef.current.findIndex(it => it.id === payload.item.id);
-          if (idx >= 0) { itemsRef.current[idx] = payload.item; render(); }
-          return;
-        }
-      })
-      .subscribe(s => setConnected(s === "SUBSCRIBED"));
-    channelRef.current = ch;
-    return () => { supabase.removeChannel(ch); };
+    let cancelled = false;
+
+    const handler = ({ payload }: { payload: WsEvent }) => {
+      if (payload.type === "clear")     { itemsRef.current = []; remotePathsRef.current.clear(); render(); return; }
+      if (payload.type === "pdf_clear") { pdfOffscreen.current = null; render(); setPdf(null); return; }
+      if (payload.type === "pdf_page")  { loadPdfPage(payload.pdfUrl, "", payload.pdfPage); return; }
+      if (payload.type === "viewport")  { applyView(payload.zoom, payload.panX, payload.panY); return; }
+      if (payload.type === "ruling")    { setRuling(payload.ruling); return; }
+      if (payload.type === "laser") {
+        setLaserPos({ x: payload.x, y: payload.y });
+        if (laserTimer.current) clearTimeout(laserTimer.current);
+        laserTimer.current = setTimeout(() => setLaserPos(null), 2500); return;
+      }
+      if (payload.type === "cursor") {
+        setRemoteCursor({ x: payload.x, y: payload.y });
+        if (remoteCursorTimer.current) clearTimeout(remoteCursorTimer.current);
+        remoteCursorTimer.current = setTimeout(() => setRemoteCursor(null), 3000); return;
+      }
+      if (payload.type === "path-pt") {
+        const { id, x, y, color, size, eraser, highlight } = payload;
+        const existing = remotePathsRef.current.get(id);
+        if (existing) { existing.points.push({ x, y }); }
+        else { remotePathsRef.current.set(id, { type:"path", id, points:[{x,y}], color, size, eraser, highlight }); }
+        render(); return;
+      }
+      if (payload.type === "path") {
+        remotePathsRef.current.delete(payload.item.id);
+        itemsRef.current.push(payload.item); render(); return;
+      }
+      if (payload.type === "update") {
+        const idx = itemsRef.current.findIndex(it => it.id === payload.item.id);
+        if (idx >= 0) { itemsRef.current[idx] = payload.item; render(); }
+        return;
+      }
+    };
+
+    async function connect() {
+      // Ensure a Supabase session exists so the server accepts our broadcasts.
+      // Students don't sign in with Supabase auth — sign them in anonymously
+      // so the Realtime server treats them as authenticated and forwards their events.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        await supabase.auth.signInAnonymously();
+      }
+      if (cancelled) return;
+      const ch = supabase
+        .channel(`board-${roomId}`, { config: { broadcast: { self: false } } })
+        .on("broadcast", { event: "draw" }, handler)
+        .subscribe(s => setConnected(s === "SUBSCRIBED"));
+      channelRef.current = ch;
+    }
+
+    connect();
+    return () => {
+      cancelled = true;
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
   }, [roomId, render, applyView, loadPdfPage]);
 
   const send = (p: WsEvent) => channelRef.current?.send({ type: "broadcast", event: "draw", payload: p });
