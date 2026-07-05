@@ -19,12 +19,16 @@ export default function BetaCodesPanel({ initial }: { initial: BetaCode[] }) {
   const [loading, setLoading] = useState(false);
   const [copied,  setCopied]  = useState<string | null>(null);
 
+  const [genError, setGenError] = useState<string | null>(null);
+
   async function handleGenerate() {
     setLoading(true);
+    setGenError(null);
     const result = await generateBetaCodes(count, note || undefined);
-    const newGenerated = "codes" in result ? (result as { codes: string[] }).codes : null;
-    if (newGenerated) {
-      const newCodes: BetaCode[] = newGenerated.map(c => ({
+    if ("error" in result) {
+      setGenError((result as { error: string }).error);
+    } else {
+      const newCodes: BetaCode[] = result.codes.map(c => ({
         code: c, note: note || null, used_by: null, used_at: null,
         created_at: new Date().toISOString(), tutors: null,
       }));
@@ -89,6 +93,9 @@ export default function BetaCodesPanel({ initial }: { initial: BetaCode[] }) {
           style={{ background: "var(--gradient-primary)", opacity: loading ? 0.7 : 1 }}>
           {loading ? "..." : "Сгенерировать"}
         </button>
+        {genError && (
+          <p className="w-full text-xs text-red-600">{genError}</p>
+        )}
         {freeCodes.length > 0 && (
           <button onClick={copyAllFree}
             className="px-4 py-2 rounded-lg text-sm border shrink-0"

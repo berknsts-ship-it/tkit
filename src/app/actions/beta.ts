@@ -88,9 +88,11 @@ export async function generateBetaCodes(count: number, note?: string) {
     codes.push(code);
   }
 
-  await db.from("beta_codes").insert(
+  const { error: insertErr } = await db.from("beta_codes").insert(
     codes.map(code => ({ code, note: note || null }))
   );
+
+  if (insertErr) return { error: insertErr.message };
 
   revalidatePath("/creator");
   return { codes };
