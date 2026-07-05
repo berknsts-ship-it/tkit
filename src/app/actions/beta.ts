@@ -103,12 +103,28 @@ export async function listBetaCodes() {
   if (!isCreator(user?.email)) return [];
 
   const db = createAdminClient();
-  const { data } = await db
+  const { data: codes } = await db
     .from("beta_codes")
-    .select("code, note, used_by, used_at, created_at, tutors(name, email)")
+    .select("code, note, used_by, used_at, created_at")
     .order("created_at", { ascending: false });
 
-  return data ?? [];
+  if (!codes?.length) return [];
+
+  // Отдельно подгружаем имена тьюторов (нет прямого FK beta_codes -> tutors)
+  const usedIds = codes.filter(c => c.used_by).map(c => c.used_by as string);
+  const tutorMap: Record<string, { name: string | null; email: string }> = {};
+  if (usedIds.length) {
+    const { data: tutors } = await db
+      .from("tutors")
+      .select("id, name, email")
+      .in("id", usedIds);
+    (tutors ?? []).forEach(t => { tutorMap[t.id] = { name: t.name, email: t.email }; });
+  }
+
+  return codes.map(c => ({
+    ...c,
+    tutors: c.used_by ? (tutorMap[c.used_by] ?? null) : null,
+  }));
 }
 
 // Удалить неиспользованный код
