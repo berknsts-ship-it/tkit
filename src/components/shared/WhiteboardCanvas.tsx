@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { flushSync } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
+import { saveBoardState, loadBoardState } from "@/app/actions/board";
 import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
@@ -111,7 +112,8 @@ type WsEvent =
   | { type: "viewport"; zoom: number; panX: number; panY: number }
   | { type: "pdf_page"; pdfUrl: string; pdfPage: number }
   | { type: "pdf_clear" }
-  | { type: "ruling";  ruling: Ruling };
+  | { type: "ruling";  ruling: Ruling }
+  | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number };
 
 // ── image cache ───────────────────────────────────────────────────────────────
 const imgCache = new Map<string, HTMLImageElement>();
@@ -907,6 +909,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const renderMinimapFnRef = useRef<() => void>(() => {});
   const pdfOffscreen    = useRef<HTMLCanvasElement | null>(null);
   const channelRef      = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
+  const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSaveRef     = useRef(false);
+  const roomIdRef       = useRef(roomId);
 
   const itemsRef      = useRef<DrawItem[]>([]);
   const livePathRef   = useRef<PathItem | null>(null);
@@ -926,6 +931,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [fnError,     setFnError]     = useState(false);
   const [showFnPanel, setShowFnPanel] = useState(false);
   const [isMobile,    setIsMobile]    = useState(false);
+  // video sync
+  const videosRef         = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const videoSeekTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [pendingVideoSync, setPendingVideoSync] = useState<Map<string, { position: number; sentAt: number }>>(new Map());
 
   // undo/redo
   type HistoryEntry =
@@ -1126,7 +1135,53 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     }
     ctx.restore();
     renderMinimapFnRef.current();
+    if (role === "tutor" && !skipSaveRef.current) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveBoardState(roomIdRef.current, itemsRef.current);
+      }, 1500);
+    }
   }, [shapeKind, color, size, shapeFill, frameShape, frameColor, frameFill, frameOpacity, frameBorderWidth]);
+
+  // ── board persistence: keep roomIdRef in sync ────────────────────────────────
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+
+  // ── board persistence: load on mount / student switch ────────────────────────
+  useEffect(() => {
+    itemsRef.current = [];
+    remotePathsRef.current.clear();
+    render();
+    let cancelled = false;
+    loadBoardState(roomId).then(items => {
+      if (cancelled || !items.length) return;
+      itemsRef.current = items as DrawItem[];
+      render();
+    });
+    return () => {
+      cancelled = true;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // ── touch: block passive scroll/zoom on the canvas container ────────────────
+  // React 17+ registers synthetic onTouch* as passive, so e.preventDefault() inside
+  // them is silently ignored. We attach non-passive native listeners purely to call
+  // preventDefault() so the browser never starts a scroll/zoom gesture.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const prevent = (e: TouchEvent) => {
+      if ((e.target as HTMLElement).closest?.("video")) return;
+      e.preventDefault();
+    };
+    el.addEventListener("touchstart", prevent, { passive: false });
+    el.addEventListener("touchmove",  prevent, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", prevent);
+      el.removeEventListener("touchmove",  prevent);
+    };
+  }, []);
 
   // ── mobile detection ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1406,7 +1461,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         const existing = remotePathsRef.current.get(id);
         if (existing) { existing.points.push({ x, y }); }
         else { remotePathsRef.current.set(id, { type:"path", id, points:[{x,y}], color, size, eraser, highlight }); }
-        render(); return;
+        skipSaveRef.current = true; render(); skipSaveRef.current = false;
+        return;
       }
       if (payload.type === "path") {
         remotePathsRef.current.delete(payload.item.id);
@@ -1415,6 +1471,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       if (payload.type === "update") {
         const idx = itemsRef.current.findIndex(it => it.id === payload.item.id);
         if (idx >= 0) { itemsRef.current[idx] = payload.item; render(); }
+        return;
+      }
+      if (payload.type === "video_sync") {
+        const vid = videosRef.current.get(payload.id);
+        if (payload.action === "pause") {
+          if (vid) { vid.currentTime = payload.position; vid.pause(); }
+        } else if (payload.action === "seek") {
+          if (vid) vid.currentTime = payload.position;
+        } else if (payload.action === "play") {
+          if (vid) vid.currentTime = Math.max(0, payload.position);
+          setPendingVideoSync(prev => { const m = new Map(prev); m.set(payload.id, { position: payload.position, sentAt: payload.sentAt }); return m; });
+        }
         return;
       }
     };
@@ -2536,124 +2604,131 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   // ── minimap rendering ─────────────────────────────────────────────────────────
   const renderMinimap = useCallback(() => {
     const mc = minimapRef.current;
-    if (!mc) return;
-    const W = mc.width, H = mc.height;
+    const main = canvasRef.current;
+    if (!mc || !main) return;
+
+    // DPR-aware sizing: canvas buffer = CSS size × DPR, so retina looks sharp
+    const dpr = window.devicePixelRatio || 1;
+    const CSS_W = 210, CSS_H = 130;
+    const targetW = Math.round(CSS_W * dpr), targetH = Math.round(CSS_H * dpr);
+    if (mc.width !== targetW || mc.height !== targetH) {
+      mc.width = targetW; mc.height = targetH;
+      mc.style.width = CSS_W + "px"; mc.style.height = CSS_H + "px";
+    }
+    const W = mc.width, H = mc.height; // physical pixels
     const mctx = mc.getContext("2d");
     if (!mctx) return;
 
-    mctx.clearRect(0, 0, W, H);
-
     const items = itemsRef.current;
-
-    // Bounds: start from viewport, expand to include items
     const { zoom, panX, panY } = viewRef.current;
     const cont = containerRef.current;
     const cw = cont?.clientWidth ?? 800, ch = cont?.clientHeight ?? 600;
-    let minX = -panX / zoom, minY = -panY / zoom;
-    let maxX = (cw - panX) / zoom, maxY = (ch - panY) / zoom;
 
+    // Current viewport in world coords
+    const vx1 = -panX / zoom, vy1 = -panY / zoom;
+    const vx2 = (cw - panX) / zoom, vy2 = (ch - panY) / zoom;
+
+    // World content bounds: start from viewport, expand to include all items
+    let minX = vx1, minY = vy1, maxX = vx2, maxY = vy2;
     for (const item of items) {
       const b = getItemBounds(item);
       if (!b) continue;
       minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
       maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
     }
-
     const pad = Math.max((maxX - minX) * 0.06, 40);
     minX -= pad; minY -= pad; maxX += pad; maxY += pad;
     const bw = maxX - minX, bh = maxY - minY;
+
+    // Physical pixels per world unit (scale to fit minimap buffer)
     const scale = Math.min(W / bw, H / bh);
     const offX = (W - bw * scale) / 2;
     const offY = (H - bh * scale) / 2;
-    minimapMapRef.current = { minX, minY, scale, offX, offY };
+
+    // Store in CSS pixel coords so the click handler works correctly on retina
+    minimapMapRef.current = { minX, minY, scale: scale / dpr, offX: offX / dpr, offY: offY / dpr };
 
     const mx = (x: number) => (x - minX) * scale + offX;
     const my = (y: number) => (y - minY) * scale + offY;
 
     // Background
-    mctx.fillStyle = "#f8f5f0";
+    mctx.fillStyle = "#f0ece6";
     mctx.fillRect(0, 0, W, H);
 
-    // Draw function graphs as sampled curves
+    // Off-screen items (not currently in the viewport) — draw as simple shapes
+    mctx.globalAlpha = 0.75;
     for (const item of items) {
-      if (item.type !== "function") continue;
-      const fn = parseFormula((item as FunctionItem).formula);
-      if (!fn) continue;
-      mctx.save();
-      mctx.strokeStyle = (item as FunctionItem).color ?? "#4a80f0";
-      mctx.lineWidth = 1.5;
-      mctx.globalAlpha = 0.7;
-      mctx.beginPath();
-      let started = false;
-      const steps = 120;
-      for (let i = 0; i <= steps; i++) {
-        const wx = minX + (maxX - minX) * (i / steps);
-        const wy = -fn(wx);
-        if (!isFinite(wy) || Math.abs(wy) > (maxY - minY) * 10) { started = false; continue; }
-        const sx = mx(wx), sy = my(wy);
-        if (!started) { mctx.moveTo(sx, sy); started = true; } else { mctx.lineTo(sx, sy); }
-      }
-      mctx.stroke();
-      mctx.restore();
-    }
-
-    // Draw items
-    mctx.globalAlpha = 0.85;
-    for (const item of items) {
-      if (item.type === "function") continue;
       const b = getItemBounds(item);
       if (!b) continue;
-      const sw = Math.max(b.w * scale, 4), sh = Math.max(b.h * scale, 4);
-      if (item.type === "frame") {
-        mctx.fillStyle = item.bgColor ?? "#e0e7ff";
-        mctx.strokeStyle = item.color ?? "#6366f1";
-        mctx.lineWidth = 1.5;
-        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
-        mctx.strokeRect(mx(b.x), my(b.y), sw, sh);
-      } else if (item.type === "text") {
-        mctx.fillStyle = "#f59e0b";
-        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
-      } else if (item.type === "image") {
-        mctx.fillStyle = "#10b981";
-        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
-      } else if (item.type === "video") {
-        mctx.fillStyle = "#6366f1";
-        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
-      } else if (item.type === "shape") {
-        mctx.fillStyle = item.fill ?? item.color ?? "#94a3b8";
-        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
-      } else if (item.type === "path") {
-        // Draw actual path points for better fidelity
+      // Skip items that overlap the viewport — they'll appear via drawImage below
+      if (b.x < vx2 && b.x + b.w > vx1 && b.y < vy2 && b.y + b.h > vy1) continue;
+      const sw = Math.max(b.w * scale, 2), sh = Math.max(b.h * scale, 2);
+      if (item.type === "path") {
         const pts = (item as PathItem).points;
-        if (pts.length < 2) {
-          mctx.fillStyle = (item as PathItem).color ?? "#1a1a1a";
-          mctx.fillRect(mx(b.x), my(b.y), Math.max(sw, 4), Math.max(sh, 4));
-        } else {
+        if (pts.length >= 2) {
           mctx.save();
           mctx.strokeStyle = (item as PathItem).color ?? "#1a1a1a";
-          mctx.lineWidth = Math.max(1, (item as PathItem).size * scale * 0.5);
+          mctx.lineWidth = Math.max(1.5, (item as PathItem).size * scale * 0.5);
           mctx.lineCap = "round"; mctx.lineJoin = "round";
           mctx.beginPath();
           mctx.moveTo(mx(pts[0].x), my(pts[0].y));
           for (let i = 1; i < pts.length; i++) mctx.lineTo(mx(pts[i].x), my(pts[i].y));
           mctx.stroke();
           mctx.restore();
+          continue;
         }
+        mctx.fillStyle = (item as PathItem).color ?? "#1a1a1a";
+      } else if (item.type === "frame") {
+        mctx.fillStyle = item.bgColor ?? "#e0e7ff";
+        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
+        mctx.strokeStyle = item.color ?? "#6366f1";
+        mctx.lineWidth = 1;
+        mctx.strokeRect(mx(b.x), my(b.y), sw, sh);
+        continue;
+      } else if (item.type === "text") {
+        mctx.fillStyle = "#f59e0b";
+      } else if (item.type === "image") {
+        mctx.fillStyle = "#10b981";
+      } else if (item.type === "video") {
+        mctx.fillStyle = "#6366f1";
+      } else if (item.type === "shape") {
+        mctx.fillStyle = item.fill ?? item.color ?? "#94a3b8";
+      } else if (item.type === "function") {
+        const fn = parseFormula((item as FunctionItem).formula);
+        if (fn) {
+          mctx.save();
+          mctx.strokeStyle = (item as FunctionItem).color ?? "#4a80f0";
+          mctx.lineWidth = 1.5; mctx.globalAlpha = 0.7;
+          mctx.beginPath();
+          let started = false;
+          for (let i = 0; i <= 80; i++) {
+            const wx = minX + bw * (i / 80), wy = -fn(wx);
+            if (!isFinite(wy) || Math.abs(wy) > bh * 10) { started = false; continue; }
+            if (!started) { mctx.moveTo(mx(wx), my(wy)); started = true; } else mctx.lineTo(mx(wx), my(wy));
+          }
+          mctx.stroke(); mctx.restore(); continue;
+        }
+        continue;
       } else {
         mctx.fillStyle = "#94a3b8";
-        mctx.fillRect(mx(b.x), my(b.y), sw, sh);
       }
+      mctx.fillRect(mx(b.x), my(b.y), sw, sh);
     }
-
-    // Viewport rect
-    const vx1 = -panX / zoom, vy1 = -panY / zoom;
-    const vx2 = (cw - panX) / zoom, vy2 = (ch - panY) / zoom;
     mctx.globalAlpha = 1;
-    mctx.fillStyle = "rgba(59,130,246,0.10)";
-    mctx.fillRect(mx(vx1), my(vy1), (vx2 - vx1) * scale, (vy2 - vy1) * scale);
+
+    // Viewport area: copy pixel-perfect from the main canvas via drawImage.
+    // main canvas shows world [vx1,vy1→vx2,vy2]; paste it into the corresponding
+    // region of the minimap so visible content always matches exactly.
+    const vpDstX = mx(vx1), vpDstY = my(vy1);
+    const vpDstW = (vx2 - vx1) * scale, vpDstH = (vy2 - vy1) * scale;
+    mctx.drawImage(main, 0, 0, main.width, main.height, vpDstX, vpDstY, vpDstW, vpDstH);
+
+    // Viewport indicator — blue tint + border
+    mctx.fillStyle = "rgba(59,130,246,0.08)";
+    mctx.fillRect(vpDstX, vpDstY, vpDstW, vpDstH);
     mctx.strokeStyle = "#3b82f6";
-    mctx.lineWidth = 1.5;
-    mctx.strokeRect(mx(vx1), my(vy1), (vx2 - vx1) * scale, (vy2 - vy1) * scale);
+    mctx.lineWidth = Math.max(1.5, dpr);
+    mctx.strokeRect(vpDstX, vpDstY, vpDstW, vpDstH);
   }, [showMinimap]);
 
   // keep fn ref in sync
@@ -3117,7 +3192,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
         {/* Canvas */}
         <div ref={containerRef} className="flex-1 relative overflow-hidden"
-        style={{ background:"#e8e8e8", cursor }}
+        style={{ background:"#e8e8e8", cursor, touchAction:"none" }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -3143,9 +3218,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         onTouchEnd={onTouchEnd}
         onTouchCancel={() => {
           selDragRef.current = null; setTouchDragging(false);
-          livePathRef.current = null; liveShapeRef.current = null;
+          livePathRef.current = null; liveShapeRef.current = null; liveFrameRef.current = null;
           panning.current = false; eraserActiveRef.current = false;
           touchDrawPending.current = null;
+          render();
         }}>
 
         <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }} />
@@ -3167,10 +3243,48 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 e.stopPropagation();
                 setSelectedId(vi.id); setSelectedIds(new Set());
               }}>
-              <div className="w-full h-full overflow-hidden"
+              <div className="w-full h-full overflow-hidden relative"
                 style={{ outline: selected ? "2px solid #4a80f0" : undefined }}>
                 <video src={vi.url} controls className="w-full h-full object-contain bg-black"
-                  style={{ display:"block" }}/>
+                  style={{ display:"block" }}
+                  ref={el => { if (el) videosRef.current.set(vi.id, el); else videosRef.current.delete(vi.id); }}
+                  onPlay={role === "tutor" ? e => {
+                    send({ type: "video_sync", id: vi.id, action: "play", position: e.currentTarget.currentTime, sentAt: Date.now() });
+                  } : undefined}
+                  onPause={role === "tutor" ? e => {
+                    const v = e.currentTarget;
+                    if (!v.ended) send({ type: "video_sync", id: vi.id, action: "pause", position: v.currentTime, sentAt: Date.now() });
+                  } : undefined}
+                  onSeeked={role === "tutor" ? e => {
+                    const pos = e.currentTarget.currentTime;
+                    const id  = vi.id;
+                    const t   = videoSeekTimerRef.current.get(id);
+                    if (t) clearTimeout(t);
+                    videoSeekTimerRef.current.set(id, setTimeout(() => {
+                      videoSeekTimerRef.current.delete(id);
+                      send({ type: "video_sync", id, action: "seek", position: pos, sentAt: Date.now() });
+                    }, 200));
+                  } : undefined}
+                />
+                {/* Student sync overlay — appears on tutor's play event, dismissed by user gesture */}
+                {role === "student" && pendingVideoSync.has(vi.id) && (
+                  <button
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+                    style={{ background: "rgba(0,0,0,0.70)", color: "white", zIndex: 3, border: "none", cursor: "pointer" }}
+                    onClick={() => {
+                      const p = pendingVideoSync.get(vi.id);
+                      if (!p) return;
+                      const vid = videosRef.current.get(vi.id);
+                      if (vid) {
+                        vid.currentTime = Math.max(0, p.position + (Date.now() - p.sentAt) / 1000);
+                        vid.play().catch(() => {});
+                      }
+                      setPendingVideoSync(prev => { const m = new Map(prev); m.delete(vi.id); return m; });
+                    }}>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width={44} height={44}><path d="M8 5v14l11-7z"/></svg>
+                    <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.2 }}>Готов смотреть</span>
+                  </button>
+                )}
               </div>
               {/* Fullscreen button */}
               <button
