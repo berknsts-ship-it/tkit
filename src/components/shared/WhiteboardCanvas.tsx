@@ -1791,7 +1791,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     livePathRef.current = {
       type:"path", id: pathId, points:[w], color:c, size:s, eraser:false, highlight:hl,
       ...(!hl && opacity < 100 ? { opacity } : {}),
-      ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
     };
   };
 
@@ -1961,7 +1960,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           ...(frameOpacity < 100 ? { opacity: frameOpacity } : {}),
           borderWidth: frameBorderWidth,
           fontSize: frameFontSize, textColor: frameTextColor,
-          ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
         };
         itemsRef.current.push(item); render();
         send({ type:"path", item }); pushHistory({ type:"add", item });
@@ -1978,7 +1976,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           type: "shape", id: uid(), shape: shapeKind,
           x1: ls.wx1, y1: ls.wy1, x2: ls.wx2, y2: ls.wy2,
           color, size, fill: shapeFill ? color + "33" : undefined,
-          ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
         };
         itemsRef.current.push(item); render();
         send({ type:"path", item }); pushHistory({ type:"add", item });
@@ -2087,7 +2084,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             type:"path", id:pathId, points:[{x:start.wx,y:start.wy}, sw],
             color:c, size:s, eraser:false, highlight:hl,
             ...(!hl && opacity < 100 ? { opacity } : {}),
-            ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
           };
           render();
         }
@@ -2195,7 +2191,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           x1:Math.min(ls.wx1,ls.wx2), y1:Math.min(ls.wy1,ls.wy2),
           x2:Math.max(ls.wx1,ls.wx2), y2:Math.max(ls.wy1,ls.wy2),
           color, size, fill: shapeFill ? color+"33" : undefined,
-          ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
         };
         itemsRef.current.push(item); render(); send({ type:"path", item }); pushHistory({ type:"add", item });
       }
@@ -2218,7 +2213,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       font: FONTS[fontIdx].family, color, fontSize, bold, italic, align,
       ...(textBgOpacity > 0 ? { bgColor: textBgColor, bgOpacity: textBgOpacity } : {}),
       ...(textOpacity < 100 ? { opacity: textOpacity } : {}),
-      ...(pdfPageRef.current !== null && !eid ? { pdfPage: pdfPageRef.current } : {}),
     };
     if (eid) {
       const idx = itemsRef.current.findIndex(i => i.id === eid);
@@ -2251,7 +2245,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         type: "image", id: uid(),
         x: cx - w / 2, y: cy - h / 2,
         w, h, url,
-        ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
       };
       itemsRef.current.push(item); render();
       send({ type: "path", item }); pushHistory({ type: "add", item });
@@ -2338,7 +2331,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         const item: ImageItem = {
           type: "image", id: uid(), url: dataUrl,
           x: cx - w / 2, y: cy - h / 2, w, h,
-          ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
         };
         const img = new Image(); img.src = dataUrl;
         img.onload = () => { imgCache.set(dataUrl, img); };
@@ -2362,7 +2354,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     const item: VideoItem = {
       type: "video", id: uid(), url,
       x: cx - w/2, y: cy - h/2, w, h,
-      ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
     };
     itemsRef.current.push(item); render();
     send({ type:"path", item }); pushHistory({ type:"add", item });
@@ -2435,7 +2426,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       text: sym, font: "Arial, sans-serif",
       color, fontSize: fs, bold: false, italic: false, align: "center",
       isSymbol: true,
-      ...(pdfPageRef.current !== null ? { pdfPage: pdfPageRef.current } : {}),
     };
     itemsRef.current.push(item); render();
     send({ type:"path", item }); pushHistory({ type:"add", item });
