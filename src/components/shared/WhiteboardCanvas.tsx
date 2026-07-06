@@ -119,7 +119,7 @@ type WsEvent =
 const imgCache = new Map<string, HTMLImageElement>();
 function getCachedImage(url: string, onLoad: () => void): HTMLImageElement | null {
   if (imgCache.has(url)) return imgCache.get(url)!;
-  const img = new Image(); img.crossOrigin = "anonymous"; img.src = url;
+  const img = new Image(); img.src = url;
   img.onload = () => { imgCache.set(url, img); onLoad(); };
   return null;
 }
@@ -2163,7 +2163,6 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     }
     // Pre-load to validate URL and get dimensions
     const img = new window.Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => placeItem(DEFAULT_W, Math.max(50, Math.round(DEFAULT_W * img.naturalHeight / img.naturalWidth)));
     img.onerror = () => setImgError("Не удалось загрузить изображение. Проверьте ссылку.");
     img.src = url;
@@ -2271,7 +2270,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     try {
       const form = new FormData(); form.append("file", file);
       const res  = await fetch("/api/board/image", { method: "POST", body: form });
-      if (!res.ok) { const url = URL.createObjectURL(file); addImageToBoard(url); return; }
+      if (!res.ok) { setImgError("Не удалось загрузить изображение. Попробуйте ещё раз."); return; }
       const { url } = await res.json();
       addImageToBoard(url);
     } finally { setImgUploading(false); }
@@ -4150,6 +4149,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {imgDialog && (
           <div className="absolute inset-0 flex items-center justify-center z-50"
             style={{ background:"rgba(0,0,0,0.35)" }}
+            data-no-prevent
             onClick={() => setImgDialog(false)}
             onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="rounded-2xl border shadow-2xl p-5 w-full max-w-sm mx-4"
