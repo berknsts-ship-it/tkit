@@ -1173,6 +1173,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     if (!el) return;
     const prevent = (e: TouchEvent) => {
       if ((e.target as HTMLElement).closest?.("video")) return;
+      if ((e.target as HTMLElement).closest?.("[data-no-prevent]")) return;
       e.preventDefault();
     };
     el.addEventListener("touchstart", prevent, { passive: false });
@@ -1919,18 +1920,20 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       setPendingSymbol(null); setPendingSymbolPos(null); return;
     }
 
-    // Always hit-test: tapping any item selects it regardless of tool
-    const hit = [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y));
-    if (hit) {
-      if (hit.locked) {
-        if (role === "tutor") { setSelectedId(hit.id); setSelectedIds(new Set([hit.id])); }
-      } else {
-        setSelectedId(hit.id);
-        setSelectedIds(new Set([hit.id]));
-        selDragRef.current = { mode: "move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit } };
-        flushSync(() => setTouchDragging(true));
+    // Drawing tools always draw — never select/drag on touch
+    if (tool !== "pen" && tool !== "highlight" && tool !== "eraser" && tool !== "shape") {
+      const hit = [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y));
+      if (hit) {
+        if (hit.locked) {
+          if (role === "tutor") { setSelectedId(hit.id); setSelectedIds(new Set([hit.id])); }
+        } else {
+          setSelectedId(hit.id);
+          setSelectedIds(new Set([hit.id]));
+          selDragRef.current = { mode: "move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit } };
+          flushSync(() => setTouchDragging(true));
+        }
+        return;
       }
-      return;
     }
 
     // No item hit — deselect and handle by tool
@@ -2047,6 +2050,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
   const onTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault();
+    // Eraser tap: finger lifted before crossing draw threshold — erase at touch point
+    if (tool === "eraser" && touchDrawPending.current) {
+      eraserRadiusRef.current = size * 3;
+      eraseAt(touchDrawPending.current.wx, touchDrawPending.current.wy);
+    }
     touchDrawPending.current = null;
     if (e.touches.length < 2 && panning.current) {
       panning.current = false;
@@ -4380,7 +4388,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         )}
 
         {/* Minimap — collapsed icon / expanded panel */}
-        <div className="absolute bottom-3 right-3 z-[60] flex flex-col items-end gap-1.5">
+        <div className="absolute bottom-3 right-3 z-[60] flex flex-col items-end gap-1.5" data-no-prevent>
           {/* Expanded panel */}
           {showMinimap && (
             <div className="rounded-xl overflow-hidden shadow-xl border"
