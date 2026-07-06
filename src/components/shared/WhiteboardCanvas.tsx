@@ -121,8 +121,16 @@ type WsEvent =
 const imgCache = new Map<string, HTMLImageElement>();
 function getCachedImage(url: string, onLoad: () => void): HTMLImageElement | null {
   if (imgCache.has(url)) return imgCache.get(url)!;
-  const img = new Image(); img.src = url;
+  const img = new Image();
+  if (!url.startsWith("data:")) img.crossOrigin = "anonymous";
   img.onload = () => { imgCache.set(url, img); onLoad(); };
+  img.onerror = () => {
+    // CORS failed — retry without crossOrigin (for external URLs without CORS headers)
+    const img2 = new Image();
+    img2.onload = () => { imgCache.set(url, img2); onLoad(); };
+    img2.src = url;
+  };
+  img.src = url;
   return null;
 }
 
@@ -577,7 +585,7 @@ function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem) {
 function renderImage(ctx: CanvasRenderingContext2D, item: ImageItem, onLoad: () => void) {
   const img = getCachedImage(item.url, onLoad);
   if (img) {
-    ctx.drawImage(img, item.x, item.y, item.w, item.h);
+    try { ctx.drawImage(img, item.x, item.y, item.w, item.h); } catch { /* cross-origin taint — skip */ }
   } else {
     ctx.save();
     ctx.fillStyle = "#f0f0f0"; ctx.strokeStyle = "#ccc"; ctx.lineWidth = 1 / (ctx.getTransform().a || 1);
@@ -4073,15 +4081,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     }} onClick={e => e.stopPropagation()}>
                       {/* Controls */}
                       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 12px", borderBottom:"1px solid #e8ddd2", overflowX:"auto", touchAction:"pan-x" }}>
-                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.max(8,s-2))}
+                        <button onMouseDown={e=>e.preventDefault()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();setFontSize(s=>Math.max(8,s-2));}} onClick={()=>setFontSize(s=>Math.max(8,s-2))}
                           style={{ minWidth:36, height:36, borderRadius:8, border:"1.5px solid #e8ddd2", fontSize:13, fontWeight:"bold", color:"#3A2117", background:"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>A−</button>
                         <span style={{ fontSize:13, color:"#3A2117", width:30, textAlign:"center", flexShrink:0 }}>{fontSize}</span>
-                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setFontSize(s=>Math.min(200,s+2))}
+                        <button onMouseDown={e=>e.preventDefault()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();setFontSize(s=>Math.min(200,s+2));}} onClick={()=>setFontSize(s=>Math.min(200,s+2))}
                           style={{ minWidth:36, height:36, borderRadius:8, border:"1.5px solid #e8ddd2", fontSize:13, fontWeight:"bold", color:"#3A2117", background:"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>A+</button>
                         <div style={{ width:1, height:24, background:"#e8ddd2", flexShrink:0 }}/>
-                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setBold(b=>!b)}
+                        <button onMouseDown={e=>e.preventDefault()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();setBold(b=>!b);}} onClick={()=>setBold(b=>!b)}
                           style={{ width:36, height:36, borderRadius:8, border:`1.5px solid ${bold?"#4a80f0":"#e8ddd2"}`, fontWeight:"bold", fontSize:15, color:"#3A2117", background:bold?"#eef2ff":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>B</button>
-                        <button onPointerDown={e=>e.preventDefault()} onClick={()=>setItalic(i=>!i)}
+                        <button onMouseDown={e=>e.preventDefault()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();setItalic(i=>!i);}} onClick={()=>setItalic(i=>!i)}
                           style={{ width:36, height:36, borderRadius:8, border:`1.5px solid ${italic?"#4a80f0":"#e8ddd2"}`, fontStyle:"italic", fontFamily:"Georgia,serif", fontSize:15, color:"#3A2117", background:italic?"#eef2ff":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>I</button>
                         <label style={{ position:"relative", width:36, height:36, borderRadius:8, border:"1.5px solid #e8ddd2", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, gap:2 }}>
                           <span style={{ fontWeight:"bold", fontSize:14, color, lineHeight:"1" }}>A</span>
@@ -4089,9 +4097,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                           <input type="color" value={color} onChange={e=>setColor(e.target.value)} style={{ position:"absolute", opacity:0, inset:0, cursor:"pointer" }}/>
                         </label>
                         <div style={{ flex:1 }}/>
-                        <button onPointerDown={e=>e.preventDefault()} onClick={cancel}
+                        <button onMouseDown={e=>e.preventDefault()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();cancel();}} onClick={cancel}
                           style={{ height:36, padding:"0 12px", borderRadius:10, border:"1.5px solid #e8ddd2", fontSize:13, color:"#3A2117", background:"white", flexShrink:0 }}>Отмена</button>
-                        <button onPointerDown={e=>e.preventDefault()} onClick={commitText}
+                        <button onMouseDown={e=>e.preventDefault()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();commitText();}} onClick={commitText}
                           style={{ height:36, padding:"0 14px", borderRadius:10, fontSize:13, fontWeight:600, color:"white", background:"linear-gradient(135deg,#74070E,#a01018)", border:"none", flexShrink:0 }}>Готово</button>
                       </div>
                       {/* Textarea — keyboard pushes this up naturally on mobile */}

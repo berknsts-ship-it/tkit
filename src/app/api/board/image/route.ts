@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const storage = createAdminClient();
 
   const form = await req.formData();
   const file = form.get("file") as File | null;
@@ -23,14 +25,15 @@ export async function POST(req: NextRequest) {
 
   const path = `board/${user.id}/${Date.now()}.${rawExt}`;
 
-  const { data, error } = await supabase.storage
+  const { data, error } = await storage.storage
     .from("board-images")
     .upload(path, file, { contentType, upsert: false });
 
   if (error) {
+    console.error("[board/image] upload error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { data: { publicUrl } } = supabase.storage.from("board-images").getPublicUrl(data.path);
+  const { data: { publicUrl } } = storage.storage.from("board-images").getPublicUrl(data.path);
   return NextResponse.json({ url: publicUrl });
 }
