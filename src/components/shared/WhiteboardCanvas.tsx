@@ -9,7 +9,7 @@ import {
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
   Maximize2, Hand, Navigation, Undo2, Redo2, Pointer, Lock, Unlock, ImagePlus, Link, FileText,
   Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile, Sparkles,
-  ChevronsUp, ChevronsDown, ChevronUp, ChevronDown,
+  ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, LocateFixed, LockKeyhole, LockKeyholeOpen,
 } from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -113,6 +113,7 @@ type WsEvent =
   | { type: "pdf_page"; pdfUrl: string; pdfPage: number }
   | { type: "pdf_clear" }
   | { type: "ruling";  ruling: Ruling }
+  | { type: "goto";    zoom: number; panX: number; panY: number }
   | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number };
 
 // ── image cache ───────────────────────────────────────────────────────────────
@@ -811,31 +812,48 @@ function renderFunction(ctx: CanvasRenderingContext2D, item: FunctionItem, zoom:
   ctx.restore(); // restore translate
 }
 
+function drawLockBadge(ctx: CanvasRenderingContext2D, x: number, y: number, zoom: number) {
+  const sz = Math.max(8, Math.min(18, 14 / zoom));
+  ctx.save();
+  ctx.fillStyle = "rgba(234,88,12,0.88)";
+  ctx.beginPath(); ctx.rect(x, y, sz, sz); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.font = `${sz * 0.78}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("🔒", x + sz / 2, y + sz / 2 + 0.5);
+  ctx.restore();
+}
+
 function renderItem(ctx: CanvasRenderingContext2D, item: DrawItem, zoom: number, onLoad?: () => void) {
-  if (item.type === "path")    return renderPath(ctx, item);
-  if (item.type === "image")   return renderImage(ctx, item, onLoad ?? (() => {}));
-  if (item.type === "shape")   return renderShape(ctx, item);
-  if (item.type === "frame")   return renderFrame(ctx, item);
-  if (item.type === "function") return renderFunction(ctx, item, zoom);
+  if (item.type === "path")    { renderPath(ctx, item); if (item.locked) { /* paths: no badge */ } return; }
+  if (item.type === "image")   { renderImage(ctx, item, onLoad ?? (() => {})); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
+  if (item.type === "shape")   { renderShape(ctx, item); if (item.locked) drawLockBadge(ctx, Math.max(item.x1,item.x2) - 14/zoom, Math.min(item.y1,item.y2) + 2/zoom, zoom); return; }
+  if (item.type === "frame")   { renderFrame(ctx, item); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
+  if (item.type === "function") { renderFunction(ctx, item, zoom); return; }
   if (item.type === "video") {
     ctx.save();
     ctx.fillStyle = "#111"; ctx.fillRect(item.x, item.y, item.w, item.h);
     ctx.fillStyle = "rgba(255,255,255,0.15)";
     const vcx = item.x + item.w/2, vcy = item.y + item.h/2, vr = Math.min(item.w, item.h) * 0.18;
     ctx.beginPath(); ctx.moveTo(vcx + vr, vcy); ctx.arc(vcx, vcy, vr, 0, Math.PI*2); ctx.fill();
-    ctx.restore(); return;
+    ctx.restore();
+    if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
+    return;
   }
   if (item.type === "dice" || item.type === "wheel") {
     ctx.save();
     ctx.strokeStyle = "#4a80f055"; ctx.lineWidth = 1;
     ctx.strokeRect(item.x, item.y, item.w, item.h);
-    ctx.restore(); return;
+    ctx.restore();
+    if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
+    return;
   }
   if (item.type === "table") {
     ctx.save();
     ctx.strokeStyle = "#4a80f055"; ctx.lineWidth = 1;
     ctx.strokeRect(item.x, item.y, item.w, item.h);
-    ctx.restore(); return;
+    ctx.restore();
+    if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
+    return;
   }
   renderText(ctx, item as TextItem);
 }
@@ -912,6 +930,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSaveRef     = useRef(false);
   const roomIdRef       = useRef(roomId);
+  const remoteViewportRef      = useRef<{ zoom: number; panX: number; panY: number } | null>(null);
+  const viewportThrottleRef    = useRef(0);
+  const skipViewportBroadcast  = useRef(false);
+  const gotoAnimRef            = useRef<{ rafId: number } | null>(null);
 
   const itemsRef      = useRef<DrawItem[]>([]);
   const livePathRef   = useRef<PathItem | null>(null);
@@ -925,7 +947,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [rulingSize,  setRulingSize]  = useState<RulingSize>("M");
   const rulingSizeRef = useRef<RulingSize>("M");
   const [connected,   setConnected]   = useState(false);
-  const [showMinimap, setShowMinimap] = useState(false);
+  const [showMinimap,        setShowMinimap]        = useState(false);
+  const [hasRemoteViewport,  setHasRemoteViewport]  = useState(false);
   const [snapGrid,    setSnapGrid]    = useState(false);
   const [fnFormula,   setFnFormula]   = useState("");
   const [fnError,     setFnError]     = useState(false);
@@ -1229,7 +1252,34 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const applyView = useCallback((zoom: number, panX: number, panY: number) => {
     viewRef.current = { zoom, panX, panY };
     setVpZoom(Math.round(zoom * 100)); setPanVer(v => v + 1); render();
+    // Student broadcasts viewport so tutor can track position on minimap
+    if (role === "student" && !skipViewportBroadcast.current) {
+      const now = Date.now();
+      if (now - viewportThrottleRef.current > 120) {
+        viewportThrottleRef.current = now;
+        channelRef.current?.send({ type: "broadcast", event: "draw", payload: { type: "viewport", zoom, panX, panY } });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [render]);
+
+  // smooth-animate to target viewport (used when receiving goto event)
+  const animateGoto = useCallback((tZoom: number, tPanX: number, tPanY: number) => {
+    if (gotoAnimRef.current) cancelAnimationFrame(gotoAnimRef.current.rafId);
+    const { zoom: fz, panX: fx, panY: fy } = viewRef.current;
+    const DURATION = 380;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / DURATION);
+      const e = 1 - Math.pow(1 - p, 3); // ease-out cubic
+      skipViewportBroadcast.current = true;
+      applyView(fz + (tZoom - fz) * e, fx + (tPanX - fx) * e, fy + (tPanY - fy) * e);
+      skipViewportBroadcast.current = false;
+      if (p < 1) gotoAnimRef.current = { rafId: requestAnimationFrame(step) };
+      else gotoAnimRef.current = null;
+    };
+    gotoAnimRef.current = { rafId: requestAnimationFrame(step) };
+  }, [applyView]);
 
   const zoomAt = useCallback((cx: number, cy: number, factor: number) => {
     const { zoom, panX, panY } = viewRef.current;
@@ -1445,7 +1495,23 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       if (payload.type === "clear")     { itemsRef.current = []; remotePathsRef.current.clear(); render(); return; }
       if (payload.type === "pdf_clear") { pdfOffscreen.current = null; render(); setPdf(null); return; }
       if (payload.type === "pdf_page")  { loadPdfPage(payload.pdfUrl, "", payload.pdfPage); return; }
-      if (payload.type === "viewport")  { applyView(payload.zoom, payload.panX, payload.panY); return; }
+      if (payload.type === "viewport") {
+        remoteViewportRef.current = { zoom: payload.zoom, panX: payload.panX, panY: payload.panY };
+        if (role === "student") {
+          skipViewportBroadcast.current = true;
+          applyView(payload.zoom, payload.panX, payload.panY);
+          skipViewportBroadcast.current = false;
+        } else {
+          setHasRemoteViewport(true);
+          renderMinimapFnRef.current?.();
+        }
+        return;
+      }
+      if (payload.type === "goto") {
+        remoteViewportRef.current = { zoom: payload.zoom, panX: payload.panX, panY: payload.panY };
+        animateGoto(payload.zoom, payload.panX, payload.panY);
+        return;
+      }
       if (payload.type === "ruling")    { setRuling(payload.ruling); return; }
       if (payload.type === "laser") {
         setLaserPos({ x: payload.x, y: payload.y });
@@ -1510,10 +1576,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       cancelled = true;
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [roomId, render, applyView, loadPdfPage]);
+  }, [roomId, render, applyView, loadPdfPage, animateGoto]);
 
   const send = (p: WsEvent) => channelRef.current?.send({ type: "broadcast", event: "draw", payload: p });
-  const bringToMe = () => { const { zoom, panX, panY } = viewRef.current; send({ type: "viewport", zoom, panX, panY }); };
+
+  const bringToMe  = () => { const { zoom, panX, panY } = viewRef.current; send({ type: "goto", zoom, panX, panY }); };
+  const findStudent = () => { if (remoteViewportRef.current) { const { zoom, panX, panY } = remoteViewportRef.current; applyView(zoom, panX, panY); } };
 
   // cursor broadcast
   const broadcastCursor = (wx: number, wy: number) => {
@@ -2404,6 +2472,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     send({ type:"update", item: next });
   };
 
+  const lockAll = (locked: boolean) => {
+    itemsRef.current = itemsRef.current.map(it => ({ ...it, locked })) as DrawItem[];
+    render();
+    for (const item of itemsRef.current) send({ type: "update", item });
+  };
+
   // ── layer order helpers ──────────────────────────────────────────────────────
   const reorderItem = (id: string, dir: "front" | "back" | "forward" | "backward") => {
     const arr = itemsRef.current;
@@ -2731,12 +2805,28 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     const vpDstW = (vx2 - vx1) * scale, vpDstH = (vy2 - vy1) * scale;
     mctx.drawImage(main, 0, 0, main.width, main.height, vpDstX, vpDstY, vpDstW, vpDstH);
 
-    // Viewport indicator — blue tint + border
+    // Viewport indicator — blue tint + border (current user)
     mctx.fillStyle = "rgba(59,130,246,0.08)";
     mctx.fillRect(vpDstX, vpDstY, vpDstW, vpDstH);
     mctx.strokeStyle = "#3b82f6";
     mctx.lineWidth = Math.max(1.5, dpr);
     mctx.strokeRect(vpDstX, vpDstY, vpDstW, vpDstH);
+
+    // Remote viewport (student's view) — green border for tutor
+    const rv = remoteViewportRef.current;
+    if (role === "tutor" && rv) {
+      const rvx1 = -rv.panX / rv.zoom, rvy1 = -rv.panY / rv.zoom;
+      const rvx2 = (cw - rv.panX) / rv.zoom, rvy2 = (ch - rv.panY) / rv.zoom;
+      const rvX = mx(rvx1), rvY = my(rvy1), rvW = (rvx2 - rvx1) * scale, rvH = (rvy2 - rvy1) * scale;
+      mctx.fillStyle = "rgba(34,197,94,0.08)";
+      mctx.fillRect(rvX, rvY, rvW, rvH);
+      mctx.strokeStyle = "#22c55e";
+      mctx.lineWidth = Math.max(1.5, dpr);
+      mctx.setLineDash([4 * dpr, 3 * dpr]);
+      mctx.strokeRect(rvX, rvY, rvW, rvH);
+      mctx.setLineDash([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showMinimap]);
 
   // keep fn ref in sync
@@ -3182,10 +3272,28 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
             </button>
             <Sep/>
             {role==="tutor" && (
-              <button onClick={bringToMe} title="Перенести ученика ко мне" className="p-1.5 rounded-lg border-2"
-                style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}>
-                <Navigation size={13}/>
-              </button>
+              <>
+                <button onClick={bringToMe} title="Перенести ученика ко мне" className="p-1.5 rounded-lg border-2"
+                  style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}>
+                  <Navigation size={13}/>
+                </button>
+                <button onClick={findStudent} disabled={!hasRemoteViewport}
+                  title="Найти ученика — перейти к его позиции на доске"
+                  className="p-1.5 rounded-lg border-2 disabled:opacity-30"
+                  style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}>
+                  <LocateFixed size={13}/>
+                </button>
+                <button onClick={() => lockAll(true)} title="Заблокировать все элементы"
+                  className="p-1.5 rounded-lg border"
+                  style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                  <LockKeyhole size={13}/>
+                </button>
+                <button onClick={() => lockAll(false)} title="Разблокировать все элементы"
+                  className="p-1.5 rounded-lg border"
+                  style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                  <LockKeyholeOpen size={13}/>
+                </button>
+              </>
             )}
             <button title="Очистить доску — двойной клик" onDoubleClick={handleClear} onClick={()=>{}}
               className="p-1.5 rounded-lg border hover:bg-red-50"
@@ -4492,10 +4600,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           </ToolBtn>
           <div className="flex-1 shrink-0 min-w-2"/>
           {role==="tutor" && (
-            <button onClick={bringToMe} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border-2 font-medium shrink-0"
-              style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}>
-              <Navigation size={12}/> Ко мне
-            </button>
+            <>
+              <button onClick={bringToMe} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border-2 font-medium shrink-0"
+                style={{ borderColor:"var(--brown-dark)", color:"var(--brown-dark)" }}>
+                <Navigation size={12}/> Ко мне
+              </button>
+              <button onClick={findStudent} disabled={!hasRemoteViewport}
+                className="p-2 rounded-lg border disabled:opacity-30 shrink-0"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}
+                title="Найти ученика">
+                <LocateFixed size={14}/>
+              </button>
+            </>
           )}
           <button onClick={undo} disabled={!canUndo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Undo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
           <button onClick={redo} disabled={!canRedo} className="p-2 rounded-lg border disabled:opacity-25 shrink-0" style={{ borderColor:"var(--brown-pale)" }}><Redo2 size={16} style={{ color:"var(--brown-dark)" }}/></button>
