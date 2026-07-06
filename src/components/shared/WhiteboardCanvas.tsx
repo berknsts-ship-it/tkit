@@ -1466,6 +1466,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         return;
       }
       if (payload.type === "path") {
+        if (payload.item.type === "image") console.log("[board] received image item", payload.item.id, "url-len:", (payload.item as {url:string}).url?.length ?? 0);
         remotePathsRef.current.delete(payload.item.id);
         itemsRef.current.push(payload.item); render(); return;
       }
@@ -2229,7 +2230,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         const tmp = document.createElement("canvas");
         tmp.width = Math.round(vp.width); tmp.height = Math.round(vp.height);
         await pg.render({ canvas: tmp, viewport: vp }).promise;
-        const dataUrl = tmp.toDataURL("image/png");
+        const dataUrl = tmp.toDataURL("image/jpeg", 0.88);
         const w = Math.min(tmp.width / scale, 800);
         const h = Math.round(w * (tmp.height / tmp.width));
         const item: ImageItem = {
