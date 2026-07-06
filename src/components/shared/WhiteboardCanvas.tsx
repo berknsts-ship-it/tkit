@@ -113,7 +113,8 @@ type WsEvent =
   | { type: "pdf_page"; pdfUrl: string; pdfPage: number }
   | { type: "pdf_clear" }
   | { type: "ruling";  ruling: Ruling }
-  | { type: "goto";    zoom: number; panX: number; panY: number }
+  | { type: "goto";     zoom: number; panX: number; panY: number }
+  | { type: "lock_all"; locked: boolean }
   | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number };
 
 // ── image cache ───────────────────────────────────────────────────────────────
@@ -1075,6 +1076,24 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [shapeFill,     setShapeFill]     = useState(false);
   const liveShapeRef = useRef<{ wx1: number; wy1: number; wx2: number; wy2: number } | null>(null);
 
+  // Refs that mirror drawing-style state so render() stays stable (no Realtime reconnects on toolbar clicks)
+  const colorRef           = useRef(color);
+  const sizeRef            = useRef(size);
+  const shapeKindRef       = useRef(shapeKind);
+  const shapeFillRef       = useRef(shapeFill);
+  const frameShapeRef      = useRef(frameShape);
+  const frameColorRef      = useRef(frameColor);
+  const frameFillRef       = useRef(frameFill);
+  const frameOpacityRef    = useRef(frameOpacity);
+  const frameBorderWidthRef= useRef(frameBorderWidth);
+  useEffect(() => {
+    colorRef.current = color; sizeRef.current = size;
+    shapeKindRef.current = shapeKind; shapeFillRef.current = shapeFill;
+    frameShapeRef.current = frameShape; frameColorRef.current = frameColor;
+    frameFillRef.current = frameFill; frameOpacityRef.current = frameOpacity;
+    frameBorderWidthRef.current = frameBorderWidth;
+  }, [color, size, shapeKind, shapeFill, frameShape, frameColor, frameFill, frameOpacity, frameBorderWidth]);
+
   // symbol picker
   const [showSymbols, setShowSymbols] = useState(false);
   const [symTab,      setSymTab]      = useState<string>("Математика");
@@ -1137,9 +1156,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     if (liveShapeRef.current) {
       const ls = liveShapeRef.current;
       renderShape(ctx, {
-        type: "shape", id: "__live__", shape: shapeKind,
+        type: "shape", id: "__live__", shape: shapeKindRef.current,
         x1: ls.wx1, y1: ls.wy1, x2: ls.wx2, y2: ls.wy2,
-        color, size, fill: shapeFill ? color + "33" : undefined,
+        color: colorRef.current, size: sizeRef.current,
+        fill: shapeFillRef.current ? colorRef.current + "33" : undefined,
       });
     }
     if (liveFrameRef.current) {
@@ -1150,9 +1170,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           type:"frame", id:"__live__",
           x: Math.min(lf.wx1,lf.wx2), y: Math.min(lf.wy1,lf.wy2),
           w: Math.abs(fw), h: Math.abs(fh),
-          shape: frameShape, title: "",
-          color: frameColor, bgColor: frameFill,
-          opacity: frameOpacity, borderWidth: frameBorderWidth,
+          shape: frameShapeRef.current, title: "",
+          color: frameColorRef.current, bgColor: frameFillRef.current,
+          opacity: frameOpacityRef.current, borderWidth: frameBorderWidthRef.current,
         });
       }
     }
@@ -1164,10 +1184,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         saveBoardState(roomIdRef.current, itemsRef.current);
       }, 1500);
     }
-  }, [shapeKind, color, size, shapeFill, frameShape, frameColor, frameFill, frameOpacity, frameBorderWidth]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── board persistence: keep roomIdRef in sync ────────────────────────────────
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+
+  useEffect(() => {
+    return () => {
+      if (gotoAnimRef.current) cancelAnimationFrame(gotoAnimRef.current.rafId);
+      if (inertiaRef.current)  cancelAnimationFrame(inertiaRef.current.rafId);
+    };
+  }, []);
 
   // ── board persistence: load on mount / student switch ────────────────────────
   useEffect(() => {
@@ -1273,8 +1301,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       const p = Math.min(1, (now - t0) / DURATION);
       const e = 1 - Math.pow(1 - p, 3); // ease-out cubic
       skipViewportBroadcast.current = true;
-      applyView(fz + (tZoom - fz) * e, fx + (tPanX - fx) * e, fy + (tPanY - fy) * e);
-      skipViewportBroadcast.current = false;
+      try { applyView(fz + (tZoom - fz) * e, fx + (tPanX - fx) * e, fy + (tPanY - fy) * e); }
+      finally { skipViewportBroadcast.current = false; }
       if (p < 1) gotoAnimRef.current = { rafId: requestAnimationFrame(step) };
       else gotoAnimRef.current = null;
     };
@@ -1499,8 +1527,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         remoteViewportRef.current = { zoom: payload.zoom, panX: payload.panX, panY: payload.panY };
         if (role === "student") {
           skipViewportBroadcast.current = true;
-          applyView(payload.zoom, payload.panX, payload.panY);
-          skipViewportBroadcast.current = false;
+          try { applyView(payload.zoom, payload.panX, payload.panY); }
+          finally { skipViewportBroadcast.current = false; }
         } else {
           setHasRemoteViewport(true);
           renderMinimapFnRef.current?.();
@@ -1541,6 +1569,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         if (idx >= 0) { itemsRef.current[idx] = payload.item; render(); }
         return;
       }
+      if (payload.type === "lock_all") {
+        itemsRef.current = itemsRef.current.map(it => ({ ...it, locked: payload.locked })) as DrawItem[];
+        render(); return;
+      }
       if (payload.type === "video_sync") {
         const vid = videosRef.current.get(payload.id);
         if (payload.action === "pause") {
@@ -1555,6 +1587,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       }
     };
 
+    let localCh: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
+
     async function connect() {
       // Ensure a Supabase session exists so the server accepts our broadcasts.
       // Students don't sign in with Supabase auth — sign them in anonymously
@@ -1564,17 +1598,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         await supabase.auth.signInAnonymously();
       }
       if (cancelled) return;
-      const ch = supabase
+      localCh = supabase
         .channel(`board-${roomId}`, { config: { broadcast: { self: false } } })
         .on("broadcast", { event: "draw" }, handler)
         .subscribe(s => setConnected(s === "SUBSCRIBED"));
-      channelRef.current = ch;
+      channelRef.current = localCh;
     }
 
     connect();
     return () => {
       cancelled = true;
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (localCh) supabase.removeChannel(localCh);
     };
   }, [roomId, render, applyView, loadPdfPage, animateGoto]);
 
@@ -2345,6 +2379,16 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     } finally { setImgUploading(false); }
   };
 
+  const uploadAndAddVideo = async (file: File) => {
+    const form = new FormData(); form.append("file", file);
+    try {
+      const res = await fetch("/api/board/image", { method: "POST", body: form });
+      if (!res.ok) return;
+      const { url } = await res.json();
+      addVideoToBoard(url);
+    } catch { /* ignore network errors */ }
+  };
+
 
   const handleAiLayout = async (file: File) => {
     setAiLoading(true);
@@ -2475,7 +2519,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const lockAll = (locked: boolean) => {
     itemsRef.current = itemsRef.current.map(it => ({ ...it, locked })) as DrawItem[];
     render();
-    for (const item of itemsRef.current) send({ type: "update", item });
+    send({ type: "lock_all", locked });
   };
 
   // ── layer order helpers ──────────────────────────────────────────────────────
@@ -2827,7 +2871,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       mctx.setLineDash([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMinimap]);
+  }, [showMinimap, role]);
 
   // keep fn ref in sync
   useEffect(() => { renderMinimapFnRef.current = renderMinimap; }, [renderMinimap]);
@@ -3027,7 +3071,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
                     <span className="text-xl">🎬</span><span className="text-xs">Видео</span>
                     <input type="file" accept="video/*" className="hidden"
-                      onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);addVideoToBoard(URL.createObjectURL(f));}}/>
+                      onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);uploadAndAddVideo(f);}}/>
                   </label>
                 )}
               </div>
@@ -4660,7 +4704,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
                 <span className="text-lg">🎬</span><span className="text-xs">Видео</span>
                 <input type="file" accept="video/*" className="hidden"
-                  onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);addVideoToBoard(URL.createObjectURL(f));}}/>
+                  onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);uploadAndAddVideo(f);}}/>
               </label>
             )}
           </div>

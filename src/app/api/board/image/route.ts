@@ -10,15 +10,23 @@ export async function POST(req: NextRequest) {
   const file = form.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
-  const ext  = file.name.split(".").pop() ?? "jpg";
-  const path = `board/${user.id}/${Date.now()}.${ext}`;
+  const ALLOWED: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+    pdf: "application/pdf",
+  };
+  const rawExt = (file.name.split(".").pop() ?? "").toLowerCase();
+  const contentType = ALLOWED[rawExt];
+  if (!contentType) return NextResponse.json({ error: "File type not allowed" }, { status: 400 });
+
+  const path = `board/${user.id}/${Date.now()}.${rawExt}`;
 
   const { data, error } = await supabase.storage
     .from("board-images")
-    .upload(path, file, { contentType: file.type, upsert: false });
+    .upload(path, file, { contentType, upsert: false });
 
   if (error) {
-    // If bucket doesn't exist yet — return error so client falls back to object URL
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
