@@ -100,7 +100,15 @@ type FunctionItem = {
   // Math viewport inside the box
   xMin: number; xMax: number; yMin: number; yMax: number;
 };
-type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | DiceItem | WheelItem | TableItem | FunctionItem;
+type CardItem = {
+  type: "card"; id: string;
+  word: string; translation: string;
+  hidden: boolean;
+  x: number; y: number; w: number; h: number;
+  rotation: number;
+  locked?: boolean;
+};
+type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | DiceItem | WheelItem | TableItem | FunctionItem | CardItem;
 
 type WsEvent =
   | { type: "path-pt"; id: string; x: number; y: number; color: string; size: number; eraser: boolean; highlight: boolean }
@@ -388,6 +396,7 @@ function itemBounds(item: DrawItem) {
   if (item.type === "wheel")   return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   if (item.type === "table")    return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   if (item.type === "function") return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
+  if (item.type === "card")     return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   return item.type === "path" ? pathBounds(item) : textBounds(item as TextItem);
 }
 function hitTest(item: DrawItem, wx: number, wy: number): boolean {
@@ -416,6 +425,7 @@ function shiftItem(item: DrawItem, dx: number, dy: number): DrawItem {
   if (item.type === "wheel")   return { ...item, x: item.x + dx, y: item.y + dy };
   if (item.type === "table")    return { ...item, x: item.x + dx, y: item.y + dy };
   if (item.type === "function") return { ...item, x: item.x + dx, y: item.y + dy };
+  if (item.type === "card")     return { ...item, x: item.x + dx, y: item.y + dy };
   const ti = item as TextItem;
   return { ...ti, x: ti.x + dx, y: ti.y + dy };
 }
@@ -832,7 +842,62 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, x: number, y: number, zoom
   ctx.restore();
 }
 
+function drawCard(ctx: CanvasRenderingContext2D, item: CardItem, zoom: number) {
+  const { x, y, w, h, hidden, word, translation, rotation } = item;
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.rotate(rotation * Math.PI / 180);
+  const r = Math.min(10 / zoom, w / 4, h / 4);
+  ctx.beginPath();
+  ctx.moveTo(-w/2 + r, -h/2);
+  ctx.lineTo(w/2 - r, -h/2); ctx.arcTo(w/2, -h/2, w/2, -h/2 + r, r);
+  ctx.lineTo(w/2, h/2 - r);  ctx.arcTo(w/2, h/2, w/2 - r, h/2, r);
+  ctx.lineTo(-w/2 + r, h/2); ctx.arcTo(-w/2, h/2, -w/2, h/2 - r, r);
+  ctx.lineTo(-w/2, -h/2 + r); ctx.arcTo(-w/2, -h/2, -w/2 + r, -h/2, r);
+  ctx.closePath();
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.lineWidth = 1 / zoom;
+  ctx.stroke();
+  if (hidden) {
+    ctx.fillStyle = "var(--brown-light, #b8956a)";
+    ctx.font = `bold ${Math.round(22 / zoom)}px serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("✦", 0, 0);
+  } else {
+    const maxLen = 18;
+    const wordTxt = word.length > maxLen ? word.slice(0, maxLen) + "…" : word;
+    const transTxt = translation.length > maxLen ? translation.slice(0, maxLen) + "…" : translation;
+    ctx.fillStyle = "#3b2a1a";
+    ctx.font = `bold ${Math.round(11 / zoom)}px system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(wordTxt, 0, -h * 0.18);
+    ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 0.5 / zoom;
+    ctx.beginPath(); ctx.moveTo(-w * 0.35, 0); ctx.lineTo(w * 0.35, 0); ctx.stroke();
+    ctx.fillStyle = "#7c5c3e";
+    ctx.font = `${Math.round(10 / zoom)}px system-ui, sans-serif`;
+    ctx.fillText(transTxt, 0, h * 0.22);
+  }
+  // Speaker icon
+  ctx.fillStyle = "rgba(180,149,106,0.7)";
+  ctx.font = `${Math.round(9 / zoom)}px sans-serif`;
+  ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+  ctx.fillText("🔊", w / 2 - 3 / zoom, h / 2 - 2 / zoom);
+  ctx.restore();
+}
+
+function isCardSpeakerHit(card: CardItem, wx: number, wy: number): boolean {
+  const cx = card.x + card.w / 2, cy = card.y + card.h / 2;
+  const dx = wx - cx, dy = wy - cy;
+  const rad = -card.rotation * Math.PI / 180;
+  const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+  const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+  return lx > card.w / 2 - 28 && ly > card.h / 2 - 22;
+}
+
 function renderItem(ctx: CanvasRenderingContext2D, item: DrawItem, zoom: number, onLoad?: () => void) {
+  if (item.type === "card") { drawCard(ctx, item as CardItem, zoom); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
   if (item.type === "path")    { renderPath(ctx, item); if (item.locked) { /* paths: no badge */ } return; }
   if (item.type === "image")   { renderImage(ctx, item, onLoad ?? (() => {})); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
   if (item.type === "shape")   { renderShape(ctx, item); if (item.locked) drawLockBadge(ctx, Math.max(item.x1,item.x2) - 14/zoom, Math.min(item.y1,item.y2) + 2/zoom, zoom); return; }
@@ -895,6 +960,7 @@ function getItemBounds(item: DrawItem): { x: number; y: number; w: number; h: nu
     case "shape":
       return { x: Math.min(item.x1, item.x2), y: Math.min(item.y1, item.y2),
                w: Math.max(Math.abs(item.x2 - item.x1), 8), h: Math.max(Math.abs(item.y2 - item.y1), 8) };
+    case "card":
     case "frame":
     case "function":
     case "image":
@@ -1135,6 +1201,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [pendingSymbol, setPendingSymbol]   = useState<string | null>(null);
   const [pendingSymbolPos, setPendingSymbolPos] = useState<{ sx: number; sy: number } | null>(null);
   const [touchDragging, setTouchDragging] = useState(false);
+
+  // vocab card panel
+  type VocabTopic = { id: string; title: string; words: { id: string; word: string; translation: string }[] };
+  const [showVocabPanel,    setShowVocabPanel]    = useState(false);
+  const [vocabTopics,       setVocabTopics]       = useState<VocabTopic[]>([]);
+  const [vocabTopicId,      setVocabTopicId]      = useState("");
+  const [vocabSelWords,     setVocabSelWords]     = useState<Set<string>>(new Set());
+  const [vocabFaceDown,     setVocabFaceDown]     = useState(true);
+  const [vocabLoading,      setVocabLoading]      = useState(false);
+  // flip animation overlay
+  type FlipOverlay = { id: string; sx: number; sy: number; sw: number; sh: number; rotation: number; word: string; translation: string; fromHidden: boolean; instanceId: number };
+  const [flipOverlay, setFlipOverlay] = useState<FlipOverlay | null>(null);
 
   // ── render ──────────────────────────────────────────────────────────────────
   const render = useCallback(() => {
@@ -1951,6 +2029,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         if (JSON.stringify(drag.origItem) !== JSON.stringify(next)) {
           pushHistory({ type:"update", idx, prev: drag.origItem, next: { ...next } });
           send({ type:"update", item: next });
+        } else if (drag.mode === "move" && drag.origItem.type === "card") {
+          const { cx, cy } = clientXY(e);
+          const wp = s2w(cx, cy);
+          if (isCardSpeakerHit(drag.origItem as CardItem, wp.x, wp.y)) speakWord((drag.origItem as CardItem).word);
+          else flipCard(drag.origItem.id);
         }
       }
       selDragRef.current = null; return;
@@ -2189,6 +2272,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         if (JSON.stringify(drag.origItem) !== JSON.stringify(next)) {
           pushHistory({ type:"update", idx, prev: drag.origItem, next: { ...next } });
           send({ type:"update", item: next });
+        } else if (drag.mode === "move" && drag.origItem.type === "card") {
+          if (e.changedTouches.length > 0) {
+            const r = containerRef.current!.getBoundingClientRect();
+            const wp = s2w(e.changedTouches[0].clientX - r.left, e.changedTouches[0].clientY - r.top);
+            if (isCardSpeakerHit(drag.origItem as CardItem, wp.x, wp.y)) speakWord((drag.origItem as CardItem).word);
+            else flipCard(drag.origItem.id);
+          } else {
+            flipCard(drag.origItem.id);
+          }
         }
       }
     }
@@ -2887,6 +2979,80 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   useEffect(() => { renderMinimapFnRef.current = renderMinimap; }, [renderMinimap]);
 
   // fit all content in view
+  // ── vocab cards ───────────────────────────────────────────────────────────────
+  const speakWord = useCallback((word: string) => {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(word);
+    utt.lang = "en-GB"; utt.rate = 0.85;
+    window.speechSynthesis.speak(utt);
+  }, []);
+
+  const flipCard = useCallback((id: string) => {
+    const idx = itemsRef.current.findIndex(i => i.id === id);
+    if (idx < 0) return;
+    const card = itemsRef.current[idx] as CardItem;
+    const pos = w2s(card.x, card.y);
+    const { zoom } = viewRef.current;
+    setFlipOverlay({
+      id, sx: pos.x, sy: pos.y, sw: card.w * zoom, sh: card.h * zoom,
+      rotation: card.rotation, word: card.word, translation: card.translation,
+      fromHidden: card.hidden, instanceId: Date.now(),
+    });
+    setTimeout(() => {
+      const i2 = itemsRef.current.findIndex(it => it.id === id);
+      if (i2 < 0) return;
+      (itemsRef.current[i2] as CardItem).hidden = !(itemsRef.current[i2] as CardItem).hidden;
+      render();
+      send({ type: "update", item: itemsRef.current[i2] });
+      setFlipOverlay(null);
+    }, 370);
+  }, [render, send, w2s]);
+
+  const loadVocabTopics = useCallback(async () => {
+    setVocabLoading(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("vocabulary_topics")
+        .select("id, title, vocabulary_words(id, word, translation)")
+        .eq("student_id", roomId)
+        .order("created_at", { ascending: false });
+      const mapped: VocabTopic[] = (data ?? []).map((t: {id:string;title:string;vocabulary_words:{id:string;word:string;translation:string}[]}) => ({ id: t.id, title: t.title, words: t.vocabulary_words }));
+      setVocabTopics(mapped);
+      if (mapped[0]) setVocabTopicId(mapped[0].id);
+    } finally { setVocabLoading(false); }
+  }, [roomId]);
+
+  const addCardsToBoard = useCallback(() => {
+    const topic = vocabTopics.find(t => t.id === vocabTopicId);
+    if (!topic) return;
+    const words = topic.words.filter(w => vocabSelWords.has(w.id));
+    if (!words.length) return;
+    const { panX, panY, zoom } = viewRef.current;
+    const cont = containerRef.current;
+    const CW = 120, CH = 80, GAP = 16;
+    const perRow = Math.max(1, Math.floor(((cont?.clientWidth ?? 600) / zoom - GAP) / (CW + GAP)));
+    words.forEach((w, i) => {
+      const col = i % perRow, row = Math.floor(i / perRow);
+      const rotation = (Math.random() * 8 - 4);
+      const cx = (-panX / zoom) + GAP + col * (CW + GAP) + CW / 2;
+      const cy = (-panY / zoom) + GAP + row * (CH + GAP) + CH / 2;
+      const card: CardItem = {
+        type: "card", id: uid(),
+        word: w.word, translation: w.translation,
+        hidden: vocabFaceDown,
+        x: cx - CW / 2, y: cy - CH / 2, w: CW, h: CH, rotation,
+      };
+      itemsRef.current.push(card);
+      send({ type: "path", item: card });
+      pushHistory({ type: "add", item: card });
+    });
+    render();
+    setShowVocabPanel(false);
+    setVocabSelWords(new Set());
+  }, [vocabTopics, vocabTopicId, vocabSelWords, vocabFaceDown, render, send, pushHistory]);
+
   const fitAll = useCallback(() => {
     const items = itemsRef.current;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -3058,6 +3224,14 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
                   <span className="text-xl">🎡</span><span className="text-xs">Колесо</span>
                 </button>
+                {/* Vocab cards */}
+                {role==="tutor" && (
+                  <button onClick={()=>{setShowVocabPanel(v=>!v);loadVocabTopics();setShowMoreTools(false);}}
+                    className="flex flex-col items-center gap-1 p-2 rounded-xl border hover:opacity-70"
+                    style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                    <BookOpen size={20}/><span className="text-xs">Карточки</span>
+                  </button>
+                )}
                 {/* Table */}
                 {role==="tutor" && (
                   <button onClick={()=>{setShowTablePicker(v=>!v);setShowMoreTools(false);}}
@@ -4434,6 +4608,88 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
           </div>
         )}
 
+        {/* Flip overlay */}
+        {flipOverlay && (() => {
+          const fo = flipOverlay;
+          return (
+            <FlipCard key={fo.instanceId}
+              sx={fo.sx} sy={fo.sy} sw={fo.sw} sh={fo.sh} rotation={fo.rotation}
+              word={fo.word} translation={fo.translation} fromHidden={fo.fromHidden}
+            />
+          );
+        })()}
+
+        {/* Vocab cards panel */}
+        {showVocabPanel && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
+            style={{ background:"rgba(0,0,0,0.25)" }}
+            onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowVocabPanel(false); }}>
+            <div className="rounded-2xl shadow-xl p-5 w-full max-w-sm"
+              style={{ background:"white", borderColor:"var(--brown-pale)", border:"1px solid" }}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="font-semibold text-base" style={{ color:"var(--brown-dark)" }}>Флеш-карточки</span>
+                <button onClick={()=>setShowVocabPanel(false)} style={{ color:"var(--brown-mid)" }}><X size={18}/></button>
+              </div>
+              {vocabLoading ? (
+                <div className="text-center py-6 text-sm" style={{ color:"var(--brown-mid)" }}>Загрузка...</div>
+              ) : vocabTopics.length === 0 ? (
+                <div className="text-center py-6 text-sm" style={{ color:"var(--brown-mid)" }}>У ученика нет тем словаря</div>
+              ) : (
+                <>
+                  <div className="mb-3">
+                    <label className="text-xs font-medium block mb-1" style={{ color:"var(--brown-mid)" }}>Тема</label>
+                    <select value={vocabTopicId} onChange={e=>{ setVocabTopicId(e.target.value); setVocabSelWords(new Set()); }}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                      {vocabTopics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
+                    </select>
+                  </div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color:"var(--brown-dark)" }}>
+                      <input type="checkbox" checked={vocabFaceDown} onChange={e=>setVocabFaceDown(e.target.checked)}
+                        className="accent-[var(--brown-dark)]"/>
+                      Рубашкой вниз
+                    </label>
+                  </div>
+                  {(() => {
+                    const topic = vocabTopics.find(t=>t.id===vocabTopicId);
+                    if (!topic) return null;
+                    return (
+                      <>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-xs font-medium" style={{ color:"var(--brown-mid)" }}>Слова ({topic.words.length})</span>
+                          <button className="text-xs underline" style={{ color:"var(--brown-mid)" }}
+                            onClick={()=>setVocabSelWords(vocabSelWords.size===topic.words.length ? new Set() : new Set(topic.words.map(w=>w.id)))}>
+                            {vocabSelWords.size===topic.words.length ? "Снять все" : "Выбрать все"}
+                          </button>
+                        </div>
+                        <div className="overflow-y-auto max-h-48 flex flex-col gap-1 mb-4 pr-1">
+                          {topic.words.map(w=>(
+                            <label key={w.id} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 rounded-lg hover:bg-[var(--brown-pale)]">
+                              <input type="checkbox" checked={vocabSelWords.has(w.id)}
+                                onChange={e=>{ const s=new Set(vocabSelWords); e.target.checked?s.add(w.id):s.delete(w.id); setVocabSelWords(s); }}
+                                className="accent-[var(--brown-dark)]"/>
+                              <span style={{ color:"var(--brown-dark)" }}>{w.word}</span>
+                              <span className="ml-auto" style={{ color:"var(--brown-mid)" }}>{w.translation}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <button onClick={addCardsToBoard}
+                          disabled={vocabSelWords.size===0}
+                          className="w-full py-2 rounded-xl text-sm font-semibold disabled:opacity-40"
+                          style={{ background:"var(--gradient-primary)", color:"white" }}>
+                          Добавить на доску ({vocabSelWords.size})
+                        </button>
+                      </>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Dice panel */}
         {showDice && (
           <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
@@ -4934,6 +5190,46 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 });
 WhiteboardCanvas.displayName = "WhiteboardCanvas";
 export default WhiteboardCanvas;
+
+function FlipCard({ sx, sy, sw, sh, rotation, word, translation, fromHidden }:
+  { sx:number; sy:number; sw:number; sh:number; rotation:number; word:string; translation:string; fromHidden:boolean }) {
+  const [flipped, setFlipped] = useState(false);
+  useEffect(() => { const t = requestAnimationFrame(() => setFlipped(true)); return () => cancelAnimationFrame(t); }, []);
+  const deg = flipped ? (fromHidden ? 180 : 0) : (fromHidden ? 0 : 180);
+  return (
+    <div style={{
+      position:"fixed", left:sx, top:sy, width:sw, height:sh,
+      transform:`rotate(${rotation}deg)`, transformOrigin:"center center",
+      perspective:600, pointerEvents:"none", zIndex:9999,
+    }}>
+      <div style={{
+        width:"100%", height:"100%",
+        transform:`rotateY(${deg}deg)`, transition:"transform 0.35s ease",
+        transformStyle:"preserve-3d", position:"relative",
+      }}>
+        {/* Front (hidden face) */}
+        <div style={{
+          position:"absolute", inset:0, backfaceVisibility:"hidden",
+          background:"white", borderRadius:8, border:"1px solid rgba(0,0,0,0.12)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+          <span style={{ fontSize:"1.4rem", color:"var(--brown-light,#b8956a)" }}>✦</span>
+        </div>
+        {/* Back (visible face) */}
+        <div style={{
+          position:"absolute", inset:0, backfaceVisibility:"hidden",
+          transform:"rotateY(180deg)",
+          background:"white", borderRadius:8, border:"1px solid rgba(0,0,0,0.12)",
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, padding:"6px 8px",
+        }}>
+          <span style={{ fontSize:"0.75rem", fontWeight:700, color:"#3b2a1a", textAlign:"center" }}>{word}</span>
+          <div style={{ width:"70%", height:1, background:"rgba(0,0,0,0.1)" }}/>
+          <span style={{ fontSize:"0.7rem", color:"#7c5c3e", textAlign:"center" }}>{translation}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LaserDot({ sx, sy, color }: { sx:number; sy:number; color:string }) {
   return (
