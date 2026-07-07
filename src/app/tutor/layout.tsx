@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import TutorNav from "@/components/tutor/TutorNav";
 import TutorBackground from "@/components/tutor/TutorBackground";
-import { isCreator, getCreatorViewAs } from "@/lib/creatorMode";
+import { isCreator, getCreatorViewAs, getCreatorSubject } from "@/lib/creatorMode";
 import { clearViewAs } from "@/app/actions/creator";
 import { getThemeKey, THEMES } from "@/lib/themes";
 import type { CSSProperties } from "react";
@@ -30,7 +30,9 @@ export default async function TutorLayout({ children }: { children: React.ReactN
     tutor?.plan_expires_at &&
     new Date(tutor.plan_expires_at) > new Date());
 
-  const themeKey = getThemeKey(tutor?.subject);
+  const creatorSubject = isCreator(user.email) ? await getCreatorSubject() : null;
+  const effectiveSubject = creatorSubject ?? tutor?.subject;
+  const themeKey = getThemeKey(effectiveSubject);
   const t = THEMES[themeKey];
 
   const themeVars: CSSProperties = {
@@ -65,7 +67,7 @@ export default async function TutorLayout({ children }: { children: React.ReactN
         </div>
       )}
 
-      <TutorNav tutorName={tutor?.name ?? user.email ?? "Репетитор"} isPro={!!isPro} isCreatorUser={isCreator(user.email)} subject={tutor?.subject} />
+      <TutorNav tutorName={tutor?.name ?? user.email ?? "Репетитор"} isPro={!!isPro} isCreatorUser={isCreator(user.email)} subject={effectiveSubject} subjectOverride={creatorSubject} />
 
       <main className="relative z-10 flex-1 max-w-5xl mx-auto w-full px-4 py-6">
         {children}

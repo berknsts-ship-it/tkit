@@ -24,3 +24,13 @@ export async function clearViewAs() {
   cookieStore.delete("creator_view_as");
   redirect("/creator");
 }
+
+export async function setSubjectOverride(subject: string | null) {
+  await assertCreator();
+  const cookieStore = await cookies();
+  if (subject) {
+    cookieStore.set("creator_subject", subject, { httpOnly: true, path: "/", sameSite: "lax" });
+  } else {
+    cookieStore.delete("creator_subject");
+  }
+}

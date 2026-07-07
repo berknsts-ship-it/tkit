@@ -4,10 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Menu, X } from "lucide-react";
 import TKitLogo from "@/components/TKitLogo";
 import { SupportChatButton } from "@/components/SupportChat";
+import { setSubjectOverride } from "@/app/actions/creator";
+import { SUBJECT_THEME } from "@/lib/themes";
+
+const SUBJECTS = Object.keys(SUBJECT_THEME);
 
 const LANGUAGE_SUBJECT = "Иностранный язык";
 
@@ -24,12 +28,20 @@ const navLinks = [
   { href: "/tutor/vocabulary",     label: "Словарь",    proOnly: true, languageOnly: true },
 ];
 
-export default function TutorNav({ tutorName, isPro, isCreatorUser, subject }: {
-  tutorName: string; isPro: boolean; isCreatorUser?: boolean; subject?: string | null;
+export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, subjectOverride }: {
+  tutorName: string; isPro: boolean; isCreatorUser?: boolean; subject?: string | null; subjectOverride?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function handleSubjectChange(value: string) {
+    startTransition(async () => {
+      await setSubjectOverride(value || null);
+      router.refresh();
+    });
+  }
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -75,11 +87,22 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser, subject }: {
 
           <div className="hidden md:flex items-center gap-3 shrink-0">
             {isCreatorUser && (
-              <Link href="/creator"
-                className="text-xs font-semibold px-3 py-1 rounded-full border"
-                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
-                👀 Создатель
-              </Link>
+              <>
+                <select
+                  value={subjectOverride ?? ""}
+                  onChange={e => handleSubjectChange(e.target.value)}
+                  disabled={pending}
+                  className="text-xs rounded-full border px-2 py-1"
+                  style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
+                  <option value="">— предмет —</option>
+                  {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <Link href="/creator"
+                  className="text-xs font-semibold px-3 py-1 rounded-full border"
+                  style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
+                  👀 Создатель
+                </Link>
+              </>
             )}
             {!isPro && (
               <Link href="/tutor/subscription"

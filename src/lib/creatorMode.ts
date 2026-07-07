@@ -15,3 +15,8 @@ export async function getCreatorViewAs(): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get("creator_view_as")?.value ?? null;
 }
+
+export async function getCreatorSubject(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get("creator_subject")?.value ?? null;
+}
