@@ -3114,6 +3114,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
       {/* Vertical sidebar */}
       <aside className="hidden sm:flex flex-col items-center gap-1 py-2 border-r shrink-0 relative transition-all duration-200"
+        data-no-prevent
         style={{ width: sidebarCollapsed ? 0 : 52, overflowX: "visible", overflowY: sidebarCollapsed ? "hidden" : "auto", borderColor:"var(--brown-pale)", background:"white" }}>
         <SideBtn active={tool==="select"} onClick={()=>pickTool("select")} title="Выбор [V]"><Pointer size={16}/></SideBtn>
         <SideBtn active={tool==="hand"} onClick={()=>pickTool("hand")} title="Рука [H]"><Hand size={16}/></SideBtn>
@@ -4409,7 +4410,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
         {/* Wheel edit dialog */}
         {editWheelId && (
-          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.4)" }}
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" data-no-prevent style={{ background:"rgba(0,0,0,0.4)" }}
             onClick={e => { if (e.target === e.currentTarget) setEditWheelId(null); }}
             onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="w-full max-w-sm rounded-2xl border shadow-2xl p-5"
@@ -4543,7 +4544,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
 
         {/* Table size picker */}
         {showTablePicker && (
-          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.4)" }}
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" data-no-prevent style={{ background:"rgba(0,0,0,0.4)" }}
             onClick={e => { if (e.target === e.currentTarget) setShowTablePicker(false); }}
             onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
             <div className="rounded-2xl border shadow-2xl p-5 w-72" style={{ background:"white", borderColor:"var(--brown-pale)" }}>
@@ -4585,7 +4586,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Symbol picker */}
         {showSymbols && (
           <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-            style={{ background:"rgba(0,0,0,0.2)" }}
+            data-no-prevent style={{ background:"rgba(0,0,0,0.2)" }}
             onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
             onClick={e=>{ if(e.target===e.currentTarget) setShowSymbols(false); }}>
             <div className="rounded-2xl border shadow-xl overflow-hidden"
@@ -4628,7 +4629,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Vocab cards panel */}
         {showVocabPanel && (
           <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-            style={{ background:"rgba(0,0,0,0.25)" }}
+            data-no-prevent style={{ background:"rgba(0,0,0,0.25)" }}
             onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
             onClick={e=>{ if(e.target===e.currentTarget) setShowVocabPanel(false); }}>
             <div className="rounded-2xl shadow-xl p-5 w-full max-w-sm"
@@ -4699,7 +4700,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Dice panel */}
         {showDice && (
           <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-            style={{ background:"rgba(0,0,0,0.2)" }}
+            data-no-prevent style={{ background:"rgba(0,0,0,0.2)" }}
             onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
             onClick={e=>{ if(e.target===e.currentTarget) setShowDice(false); }}>
             <div className="rounded-2xl border shadow-xl p-4 w-56"
@@ -4748,7 +4749,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* f(x) panel — mobile sheet (desktop uses the absolute dropdown in context bar) */}
         {showFnPanel && (
           <div className="sm:hidden fixed inset-0 z-[250] flex items-end justify-center pb-4 px-4"
-            style={{ background:"rgba(0,0,0,0.2)" }}
+            data-no-prevent style={{ background:"rgba(0,0,0,0.2)" }}
             onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
             onClick={e=>{ if(e.target===e.currentTarget) setShowFnPanel(false); }}>
             <div className="w-full max-w-sm rounded-2xl border shadow-xl p-4"
@@ -4775,7 +4776,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         {/* Wheel panel */}
         {showWheel && (
           <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
-            style={{ background:"rgba(0,0,0,0.2)" }}
+            data-no-prevent style={{ background:"rgba(0,0,0,0.2)" }}
             onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
             onClick={e=>{ if(e.target===e.currentTarget) setShowWheel(false); }}>
             <div className="rounded-2xl border shadow-xl p-4 w-72"
@@ -4901,7 +4902,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       </div>
 
       {/* Mobile toolbar */}
-      <div className="flex sm:hidden flex-col border-t shrink-0" style={{ borderColor:"var(--brown-pale)", background:"white" }}
+      <div className="flex sm:hidden flex-col border-t shrink-0" data-no-prevent style={{ borderColor:"var(--brown-pale)", background:"white" }}
         onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
         {/* Row 1: tools + controls */}
         <div className="flex items-center gap-1 px-2 py-1.5 border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)", touchAction:"pan-x" }}>
