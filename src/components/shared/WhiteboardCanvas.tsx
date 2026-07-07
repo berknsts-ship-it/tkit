@@ -106,7 +106,7 @@ type CardItem = {
   hidden: boolean;
   x: number; y: number; w: number; h: number;
   rotation: number;
-  locked?: boolean;
+  locked?: boolean; pdfPage?: number;
 };
 type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | DiceItem | WheelItem | TableItem | FunctionItem | CardItem;
 
