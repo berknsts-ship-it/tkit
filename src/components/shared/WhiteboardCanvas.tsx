@@ -2370,13 +2370,23 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   };
 
   const uploadAndAddImage = async (file: File) => {
+    setImgError(null);
     setImgUploading(true);
     try {
       const form = new FormData(); form.append("file", file);
-      const res  = await fetch("/api/board/image", { method: "POST", body: form });
-      if (!res.ok) { setImgError("Не удалось загрузить изображение. Попробуйте ещё раз."); return; }
+      const res = await fetch("/api/board/image", { method: "POST", body: form });
+      if (!res.ok) {
+        let detail = `${res.status}`;
+        try { const j = await res.json(); detail = j.error ?? detail; } catch { /* ignore */ }
+        console.error("[uploadAndAddImage] server error:", res.status, detail);
+        setImgError(`Не удалось загрузить (${detail}). Попробуйте ещё раз.`);
+        return;
+      }
       const { url } = await res.json();
       addImageToBoard(url);
+    } catch (err) {
+      console.error("[uploadAndAddImage] network error:", err);
+      setImgError("Ошибка сети. Проверьте подключение.");
     } finally { setImgUploading(false); }
   };
 

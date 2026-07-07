@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export async function GET() {
+  const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+  return NextResponse.json({ ok: true, hasServiceKey, hasUrl });
+}
+
 export async function POST(req: NextRequest) {
   console.log("[board/image] POST start");
 
