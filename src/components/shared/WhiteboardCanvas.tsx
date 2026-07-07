@@ -2028,6 +2028,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       setPendingSymbol(null); setPendingSymbolPos(null); return;
     }
 
+    // Text tool always creates new text at the tap point — never selects/moves
+    if (tool === "text") {
+      setSelectedId(null); setSelectedIds(new Set());
+      setTextInput({ wx: w.x, wy: w.y }); setTextValue("");
+      setTimeout(() => textRef.current?.focus(), 50); return;
+    }
+
     // Drawing tools always draw — never select/drag on touch
     if (tool !== "pen" && tool !== "highlight" && tool !== "eraser" && tool !== "shape") {
       const hit = [...itemsRef.current].reverse().find(item => hitTest(item, w.x, w.y));
@@ -2044,13 +2051,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       }
     }
 
-    // No item hit — deselect and handle by tool
+    // No item hit — deselect
     setSelectedId(null); setSelectedIds(new Set());
-
-    if (tool === "text") {
-      setTextInput({ wx: w.x, wy: w.y }); setTextValue("");
-      setTimeout(() => textRef.current?.focus(), 50); return;
-    }
     if (tool === "laser") return;
 
     // All other tools: start panning. Drawing tools (pen/highlight/eraser/shape)
@@ -3654,7 +3656,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     </div>
                     <div className="absolute pointer-events-auto flex items-center gap-1"
                       style={{ top: vOff, right: 0 }}>
-                      <button onMouseDown={e => e.stopPropagation()}
+                      <button onMouseDown={e => e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                         onClick={() => {
                           const sel = itemsRef.current.filter(i => selectedIds.has(i.id));
                           const duped = sel.map(i => shiftItem({ ...i, id: uid() }, 24, 24));
@@ -3665,7 +3667,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                         style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
                         ⧉ Дубль
                       </button>
-                      <button onMouseDown={e => e.stopPropagation()}
+                      <button onMouseDown={e => e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                         onClick={() => {
                           pushHistory({ type:"clear", saved:[...itemsRef.current] });
                           const toRemove = new Set(selectedIds);
@@ -3708,7 +3710,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     background: locked?"#e09020":"#4a80f0", border:"none" }}
                   onMouseDown={e => e.stopPropagation()}
                   onTouchStart={e => e.stopPropagation()}
-                  onTouchEnd={e => e.stopPropagation()}
+                  onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => toggleLock(selectedItem.id)}>
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
@@ -3716,47 +3718,47 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
               {/* Duplicate + Crop + Color + Layer + Delete buttons — flip below item if near top of canvas */}
               <div className="absolute pointer-events-auto flex items-center gap-1"
                 style={{ top: tl.y > 36 ? -28 : sh + 4, right:0, zIndex:36 }}>
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
                   className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
                   title="Дублировать"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>⧉</button>
                 {selectedItem.type === "image" && (
-                  <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} onClick={() => setCropId(selectedItem.id)}
+                  <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}} onClick={() => setCropId(selectedItem.id)}
                     className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
                     title="Обрезать"
                     style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>✂</button>
                 )}
                 {/* Layer order buttons */}
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => reorderItem(selectedItem.id, "forward")}
                   className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
                   title="Вперёд"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
                   <ChevronUp size={14}/>
                 </button>
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => reorderItem(selectedItem.id, "backward")}
                   className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
                   title="Назад"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
                   <ChevronDown size={14}/>
                 </button>
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => reorderItem(selectedItem.id, "front")}
                   className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
                   title="На передний план"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
                   <ChevronsUp size={14}/>
                 </button>
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => reorderItem(selectedItem.id, "back")}
                   className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
                   title="На задний план"
                   style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
                   <ChevronsDown size={14}/>
                 </button>
-                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+                <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => {
                     const toRemove = new Set(selectedIds.size > 0 ? selectedIds : [selectedItem.id]);
                     pushHistory({ type:"clear", saved:[...itemsRef.current] });
@@ -3778,7 +3780,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                     background:"#4a80f0", border:"2px solid white", boxShadow:"0 2px 8px rgba(74,128,240,0.4)" }}
                   onMouseDown={e => e.stopPropagation()}
                   onTouchStart={e => e.stopPropagation()}
-                  onTouchEnd={e => e.stopPropagation()}
+                  onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => {
                     const ti = selectedItem as TextItem;
                     editingIdRef.current = ti.id; setEditingId(ti.id);
@@ -3805,7 +3807,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   onTouchEnd={e => e.stopPropagation()}>
                   {(["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#ffffff"] as const).map(c => (
                     <button key={c}
-                      onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+                      onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                       onClick={() => updateBoardItem({...selectedItem as TextItem, color: c})}
                       className="w-5 h-5 rounded-full shrink-0 border-2"
                       style={{ background: c, borderColor: (selectedItem as TextItem).color === c ? "#4a80f0" : "var(--brown-pale)" }}/>
