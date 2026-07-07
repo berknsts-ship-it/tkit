@@ -4551,7 +4551,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         )}
 
         {/* Minimap — collapsed icon / expanded panel */}
-        <div className="absolute bottom-3 right-3 z-[60] flex flex-col items-end gap-1.5" data-no-prevent>
+        <div className="absolute bottom-3 right-3 z-[60] flex flex-col items-end gap-1.5" data-no-prevent
+          onTouchStart={e => e.stopPropagation()}
+          onTouchEnd={e => e.stopPropagation()}>
           {/* Expanded panel */}
           {showMinimap && (
             <div className="rounded-xl overflow-hidden shadow-xl border"
@@ -4578,11 +4580,25 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   const { zoom } = viewRef.current;
                   applyView(zoom, cont.clientWidth / 2 - wx * zoom, cont.clientHeight / 2 - wy * zoom);
                   render();
+                }}
+                onTouchEnd={e => {
+                  const mm = minimapMapRef.current;
+                  if (!mm) return;
+                  const touch = e.changedTouches[0];
+                  const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                  const wx = (touch.clientX - rect.left - mm.offX) / mm.scale + mm.minX;
+                  const wy = (touch.clientY - rect.top  - mm.offY) / mm.scale + mm.minY;
+                  const cont = containerRef.current;
+                  if (!cont) return;
+                  const { zoom } = viewRef.current;
+                  applyView(zoom, cont.clientWidth / 2 - wx * zoom, cont.clientHeight / 2 - wy * zoom);
+                  render();
                 }}/>
             </div>
           )}
           {/* Toggle button — always visible */}
           <button onClick={() => { setShowMinimap(v => !v); setTimeout(() => render(), 0); }}
+            onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); (e.currentTarget as HTMLButtonElement).click(); }}
             className="w-9 h-9 rounded-xl flex items-center justify-center shadow-md border transition-all"
             style={{
               background: showMinimap ? "var(--brown-pale)" : "rgba(255,255,255,0.92)",
