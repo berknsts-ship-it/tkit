@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { replyToSupport } from "@/app/actions/support";
+import { markSupportReplied } from "@/app/actions/support";
 
 type Message = {
   id: string;
@@ -15,25 +15,23 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [sent, setSent] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   if (messages.length === 0) {
     return <p className="text-sm" style={{ color: "var(--brown-light)" }}>Обращений пока нет.</p>;
   }
 
-  function handleReply(msg: Message) {
-    if (!replyText.trim()) return;
-    setError(null);
+  function handleOpenMail(msg: Message) {
+    if (!replyText.trim() || !msg.email) return;
+    const subject = encodeURIComponent("Ответ от поддержки T-Kit");
+    const body = encodeURIComponent(replyText.trim());
+    window.open(`mailto:${msg.email}?subject=${subject}&body=${body}`, "_blank");
+    // Mark as replied in DB
     startTransition(async () => {
-      const res = await replyToSupport(msg.id, msg.email!, replyText.trim());
-      if (res?.error) {
-        setError(res.error);
-      } else {
-        setSent(prev => new Set(prev).add(msg.id));
-        setReplyingId(null);
-        setReplyText("");
-      }
+      await markSupportReplied(msg.id);
+      setSent(prev => new Set(prev).add(msg.id));
+      setReplyingId(null);
+      setReplyText("");
     });
   }
 
@@ -69,7 +67,7 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
               </div>
               {msg.email && !isSent && !repliedDate && (
                 <button
-                  onClick={() => { setReplyingId(isReplying ? null : msg.id); setReplyText(""); setError(null); }}
+                  onClick={() => { setReplyingId(isReplying ? null : msg.id); setReplyText(""); }}
                   className="shrink-0 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all"
                   style={{
                     borderColor: isReplying ? "var(--brown-dark)" : "var(--brown-pale)",
@@ -91,13 +89,15 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
                   className="w-full px-3 py-2 rounded-xl border text-sm outline-none resize-none"
                   style={{ borderColor: "var(--brown-pale)", background: "var(--cream)", color: "var(--brown-dark)" }}
                 />
-                {error && <p className="text-xs text-red-600">{error}</p>}
+                <p className="text-xs" style={{ color: "var(--brown-light)" }}>
+                  Откроется твой почтовый клиент с уже заполненным ответом — нажми "Отправить" там.
+                </p>
                 <button
-                  onClick={() => handleReply(msg)}
-                  disabled={isPending || !replyText.trim()}
+                  onClick={() => handleOpenMail(msg)}
+                  disabled={!replyText.trim()}
                   className="self-end text-sm px-4 py-1.5 rounded-xl font-medium text-white disabled:opacity-50"
                   style={{ background: "var(--gradient-primary)" }}>
-                  {isPending ? "Отправка..." : "Отправить ответ"}
+                  Открыть в почте →
                 </button>
               </div>
             )}
