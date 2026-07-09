@@ -21,12 +21,14 @@ type Snapshot = {
 };
 
 export default function BoardView({
-  studentId, materials, snapshots: initialSnapshots, todayLessonId,
+  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup,
 }: {
-  studentId: string;
+  roomId: string;
+  studentId?: string;
   materials: BoardMaterial[];
   snapshots: Snapshot[];
   todayLessonId?: string;
+  isGroup?: boolean;
 }) {
   const canvasRef   = useRef<WhiteboardRef>(null);
   const canvasDivRef= useRef<HTMLDivElement>(null);
@@ -62,7 +64,7 @@ export default function BoardView({
     if (items.length === 0) return;
     startSave(async () => {
       const title = saveTitle.trim() || new Date().toLocaleDateString("ru", { day: "numeric", month: "long" });
-      await saveSnapshot(studentId, title, items, todayLessonId);
+      await saveSnapshot(studentId ?? roomId, title, items, todayLessonId);
       setSaveTitle(""); setShowSaveForm(false);
       // Optimistic update
       setSnapshots(prev => [{
@@ -135,7 +137,7 @@ export default function BoardView({
           <Globe size={14}/> <span className="hidden sm:inline">Внешняя</span><span className="sm:hidden">Внешняя</span>
         </button>
 
-        {mode === "builtin" && <>
+        {mode === "builtin" && !isGroup && <>
           <div className="w-px h-5 shrink-0" style={{ background: "var(--brown-pale)" }}/>
           {showSaveForm ? (
             <div className="flex items-center gap-2 shrink-0">
@@ -188,7 +190,7 @@ export default function BoardView({
           {/* Canvas area */}
           <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
             <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative" style={{ minHeight: "40vh" }}>
-              <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="tutor" materials={materials} />
+              <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} />
               {/* Fullscreen toggle */}
               <button
                 onClick={() => setFullscreen(v => !v)}
@@ -199,8 +201,8 @@ export default function BoardView({
                 {fullscreen ? <Minimize2 size={14} style={{ color: "var(--brown-dark)" }}/> : <Maximize2 size={14} style={{ color: "var(--brown-dark)" }}/>}
               </button>
             </div>
-            <SyncedAudio roomId={studentId} role="tutor" />
-            <SyncedVideo roomId={studentId} role="tutor" />
+            <SyncedAudio roomId={roomId} role="tutor" />
+            <SyncedVideo roomId={roomId} role="tutor" />
           </div>
 
           {/* History panel — mobile: fixed full-screen overlay, desktop: side panel */}

@@ -11,12 +11,13 @@ export async function createTopic(formData: FormData) {
 
   const title      = (formData.get("title") as string)?.trim();
   const student_id = (formData.get("student_id") as string) || null;
+  const group_id   = (formData.get("group_id") as string) || null;
   const language   = (formData.get("language") as string) || "en-US";
   if (!title) return { error: "Введите название темы" };
 
   const { data: topic, error } = await supabase
     .from("vocabulary_topics")
-    .insert({ tutor_id: user.id, title, student_id, language })
+    .insert({ tutor_id: user.id, title, student_id, group_id, language })
     .select("id")
     .single();
 

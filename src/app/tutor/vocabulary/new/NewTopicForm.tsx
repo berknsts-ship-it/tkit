@@ -6,9 +6,10 @@ import { Plus, Sparkles, X, Volume2 } from "lucide-react";
 import { speak, LANGUAGES } from "@/lib/speak";
 
 interface Student { id: string; name: string; }
+interface Group   { id: string; name: string; }
 interface Word { word: string; translation: string; example: string; }
 
-export default function NewTopicForm({ students }: { students: Student[] }) {
+export default function NewTopicForm({ students, groups }: { students: Student[]; groups: Group[] }) {
   const [words, setWords]           = useState<Word[]>([{ word: "", translation: "", example: "" }]);
   const [aiLoading, setAiLoading]   = useState<number | null>(null);
   const [loading, setLoading]       = useState(false);
@@ -122,6 +123,17 @@ export default function NewTopicForm({ students }: { students: Student[] }) {
             </select>
           </div>
         </div>
+        {groups.length > 0 && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
+              Или группа
+            </label>
+            <select name="group_id" className="w-full px-4 py-2 rounded-xl border outline-none" style={input}>
+              <option value="">— без группы —</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="mt-4">
           <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
             Язык карточек (для произношения)

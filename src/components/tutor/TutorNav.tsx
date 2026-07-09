@@ -18,6 +18,7 @@ const LANGUAGE_SUBJECT = "Иностранный язык";
 const navLinks = [
   { href: "/tutor/dashboard",      label: "Главная" },
   { href: "/tutor/students",       label: "Ученики" },
+  { href: "/tutor/groups",         label: "Группы" },
   { href: "/tutor/schedule",       label: "Расписание" },
   { href: "/tutor/homework",       label: "Задания" },
   { href: "/tutor/materials",      label: "Материалы" },

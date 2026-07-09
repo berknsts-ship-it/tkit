@@ -7,11 +7,11 @@ import BoardView from "./BoardView";
 import type { BoardMaterial } from "@/components/shared/WhiteboardCanvas";
 
 interface Props {
-  searchParams: Promise<{ student?: string }>;
+  searchParams: Promise<{ student?: string; group?: string }>;
 }
 
 export default async function BoardPage({ searchParams }: Props) {
-  const { student: studentId } = await searchParams;
+  const { student: studentId, group: groupId } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -22,11 +22,13 @@ export default async function BoardPage({ searchParams }: Props) {
   const todayStart = new Date(today); todayStart.setHours(0, 0, 0, 0);
   const todayEnd   = new Date(today); todayEnd.setHours(23, 59, 59, 999);
 
-  const [studentsRes, materialsRes] = await Promise.all([
+  const [studentsRes, groupsRes, materialsRes] = await Promise.all([
     db.from("students").select("id, name").eq("tutor_id", tutorId).order("name"),
+    db.from("groups").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("materials").select("id, title, file_url, file_name").eq("tutor_id", tutorId).order("created_at", { ascending: false }),
   ]);
   const students  = studentsRes.data ?? [];
+  const groups    = groupsRes.data ?? [];
   const materials = materialsRes.data ?? [];
 
   let snapshots: { id: string; title: string; created_at: string; lesson_id: string | null; lessons?: { scheduled_at: string } | null }[] = [];
@@ -54,14 +56,19 @@ export default async function BoardPage({ searchParams }: Props) {
   }
 
   const activeStudent = students.find(s => s.id === studentId);
+  const activeGroup   = groups.find(g => g.id === groupId);
+
+  // roomId: для группы — group_id, для ученика — student_id
+  const roomId = groupId ?? studentId;
 
   return (
     <div className="fixed inset-x-0 bottom-0 flex flex-col z-20" style={{ top: "56px" }}>
-      {/* Шапка */}
+      {/* Шапка с табами */}
       <div className="flex items-center border-b shrink-0"
         style={{ borderColor: "var(--brown-pale)", background: "white" }}>
         <span className="font-semibold text-sm shrink-0 px-3 py-2.5" style={{ color: "var(--brown-dark)" }}>Доска</span>
         <div className="flex gap-2 overflow-x-auto px-1 py-2" style={{ touchAction: "pan-x" }}>
+          {/* Ученики */}
           {students.map(s => (
             <Link key={s.id} href={`/tutor/board?student=${s.id}`}
               className="text-sm px-3 py-1 rounded-lg border transition-all whitespace-nowrap shrink-0"
@@ -74,22 +81,43 @@ export default async function BoardPage({ searchParams }: Props) {
               {s.name}
             </Link>
           ))}
+
+          {/* Разделитель, если есть и ученики и группы */}
+          {students.length > 0 && groups.length > 0 && (
+            <div className="w-px self-stretch mx-1 shrink-0" style={{ background: "var(--brown-pale)" }} />
+          )}
+
+          {/* Группы */}
+          {groups.map(g => (
+            <Link key={g.id} href={`/tutor/board?group=${g.id}`}
+              className="text-sm px-3 py-1 rounded-lg border transition-all whitespace-nowrap shrink-0"
+              style={{
+                borderColor: g.id === groupId ? "var(--brown-dark)" : "var(--brown-pale)",
+                background:  g.id === groupId ? "#eef4ff" : "transparent",
+                color:       g.id === groupId ? "var(--brown-dark)" : "var(--brown-mid)",
+                fontWeight:  g.id === groupId ? 600 : 400,
+              }}>
+              👥 {g.name}
+            </Link>
+          ))}
         </div>
       </div>
 
-      {studentId && activeStudent ? (
+      {roomId && (activeStudent || activeGroup) ? (
         <BoardView
+          roomId={roomId}
           studentId={studentId}
           materials={materials as BoardMaterial[]}
-          snapshots={snapshots}
+          snapshots={studentId ? snapshots : []}
           todayLessonId={todayLesson?.id}
+          isGroup={!!groupId}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
           <div className="text-5xl">🖊️</div>
-          <p className="font-medium" style={{ color: "var(--brown-dark)" }}>Выберите ученика</p>
+          <p className="font-medium" style={{ color: "var(--brown-dark)" }}>Выберите ученика или группу</p>
           <p className="text-sm" style={{ color: "var(--brown-light)" }}>
-            {(students ?? []).length === 0
+            {students.length === 0 && groups.length === 0
               ? "Сначала добавьте ученика"
               : "Нажмите на имя выше, чтобы открыть доску"}
           </p>
