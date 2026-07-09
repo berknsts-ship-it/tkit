@@ -3113,9 +3113,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
     <div className="flex flex-1 overflow-hidden select-none" style={{ touchAction: "none" }}>
 
       {/* Vertical sidebar */}
-      <aside className="hidden sm:flex flex-col items-center gap-1 py-2 border-r shrink-0 relative transition-all duration-200"
+      <aside className="hidden sm:flex flex-col items-center gap-1 py-2 border-r shrink-0 relative"
         data-no-prevent
-        style={{ width: sidebarCollapsed ? 0 : 52, overflowX: "visible", overflowY: sidebarCollapsed ? "hidden" : "auto", borderColor:"var(--brown-pale)", background:"white" }}>
+        style={{ width: 52, overflowX: "visible", overflowY: "auto", borderColor:"var(--brown-pale)", background:"white" }}>
         <SideBtn active={tool==="select"} onClick={()=>pickTool("select")} title="Выбор [V]"><Pointer size={16}/></SideBtn>
         <SideBtn active={tool==="hand"} onClick={()=>pickTool("hand")} title="Рука [H]"><Hand size={16}/></SideBtn>
         <div className="w-8 h-px mx-auto my-1" style={{ background:"var(--brown-pale)" }}/>
@@ -3277,18 +3277,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
         <div className="hidden sm:flex items-center border-b shrink-0"
           style={{ borderColor:"var(--brown-pale)", background:"white", minHeight:44 }}>
 
-          {/* Left: sidebar toggle + tool-specific options, scrolls horizontally */}
+          {/* Left: tool-specific options, scrolls horizontally */}
           <div className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto flex-1 min-w-0">
-
-          {/* Sidebar toggle */}
-          <button onClick={() => setSidebarCollapsed(v => !v)}
-            className="shrink-0 p-1.5 rounded-lg border-2 transition-all"
-            style={{ borderColor: sidebarCollapsed ? "var(--brown-dark)" : "var(--brown-pale)",
-              color: sidebarCollapsed ? "var(--brown-dark)" : "var(--brown-light)" }}
-            title={sidebarCollapsed ? "Показать панель инструментов" : "Скрыть панель инструментов"}>
-            <ChevronRight size={14} style={{ transform: sidebarCollapsed ? "none" : "rotate(180deg)", transition:"transform 0.2s" }}/>
-          </button>
-          <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>
 
           {/* Left: tool-specific options */}
           {tool === "highlight" && <ColorPalette colors={HIGHLIGHT_COLORS} active={hlColor} onPick={setHlColor} />}
@@ -5261,14 +5251,21 @@ function ToolBtn({ active, onClick, title, children }: { active:boolean; onClick
 }
 function Sep() { return <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>; }
 function SideBtn({ active, onClick, title, children }: { active?:boolean; onClick:()=>void; title:string; children:React.ReactNode }) {
+  const shortcut = title.match(/\[([A-Z0-9])\]/)?.[1];
   return (
     <div className="relative group">
       <button onClick={onClick} aria-label={title}
-        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all relative"
         style={{ background: active?"var(--brown-pale)":"transparent",
           color: active?"var(--brown-dark)":"var(--brown-light)",
           border: active?"2px solid var(--brown-dark)":"2px solid transparent" }}>
         {children}
+        {shortcut && (
+          <span className="absolute bottom-0.5 right-1 text-[8px] font-bold leading-none select-none"
+            style={{ color: active ? "var(--brown-dark)" : "var(--brown-light)", opacity: 0.65 }}>
+            {shortcut}
+          </span>
+        )}
       </button>
       {/* Custom tooltip — only on pointer devices, hidden on touch */}
       <div className="absolute left-full ml-2.5 top-1/2 -translate-y-1/2 z-[300]
@@ -5276,7 +5273,6 @@ function SideBtn({ active, onClick, title, children }: { active?:boolean; onClic
         opacity-0 group-hover:opacity-100 transition-opacity duration-100
         [@media(hover:hover)]:block hidden"
         style={{ filter:"drop-shadow(0 2px 6px rgba(0,0,0,.18))" }}>
-        {/* Arrow */}
         <div className="absolute right-full top-1/2 -translate-y-1/2"
           style={{ width:0, height:0,
             borderTop:"5px solid transparent", borderBottom:"5px solid transparent",
