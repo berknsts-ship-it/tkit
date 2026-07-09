@@ -45,6 +45,8 @@ type FrameItem = {
   fontSize?: number;
   borderWidth?: number;
   opacity?: number;
+  private?: boolean;
+  ownerStudentId?: string;
   locked?: boolean; pdfPage?: number;
 };
 type ImageItem = {
@@ -123,7 +125,9 @@ type WsEvent =
   | { type: "ruling";  ruling: Ruling }
   | { type: "goto";     zoom: number; panX: number; panY: number }
   | { type: "lock_all"; locked: boolean }
-  | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number };
+  | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number }
+  | { type: "privacy_mode"; enabled: boolean }
+  | { type: "reveal_all" };
 
 // ── image cache ───────────────────────────────────────────────────────────────
 const imgCache = new Map<string, HTMLImageElement>();
@@ -592,6 +596,21 @@ function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem) {
   ctx.stroke();
   ctx.restore();
 }
+function renderPrivateFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom: number) {
+  ctx.save();
+  const bw = item.borderWidth ?? 2;
+  ctx.fillStyle = "#e8e8e8";
+  ctx.strokeStyle = item.color;
+  ctx.lineWidth = bw;
+  frameShapePath(ctx, item);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#999";
+  ctx.font = `${Math.round(Math.min(item.w, item.h) * 0.3 / zoom)}px sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("🔒", item.x + item.w / 2, item.y + item.h / 2);
+  ctx.restore();
+}
 function renderImage(ctx: CanvasRenderingContext2D, item: ImageItem, onLoad: () => void) {
   const img = getCachedImage(item.url, onLoad);
   if (img) {
@@ -992,8 +1011,8 @@ function parseFormula(input: string): ((x: number) => number) | null {
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[] }>(
-function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
+const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string }>(
+function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId }, ref) {
 
   const containerRef    = useRef<HTMLDivElement>(null);
   const canvasRef       = useRef<HTMLCanvasElement>(null);
@@ -1009,6 +1028,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const viewportThrottleRef    = useRef(0);
   const skipViewportBroadcast  = useRef(false);
   const gotoAnimRef            = useRef<{ rafId: number } | null>(null);
+
+  const privacyModeRef = useRef(false);
+  const [privacyMode, setPrivacyMode] = useState(false);
 
   const itemsRef      = useRef<DrawItem[]>([]);
   const livePathRef   = useRef<PathItem | null>(null);
@@ -1236,6 +1258,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       if (item.id === editingIdRef.current) continue;
       const itemPage = item.pdfPage;
       if (itemPage !== undefined && pdfPageRef.current !== null && itemPage !== pdfPageRef.current) continue;
+      if (
+        item.type === "frame" && item.private &&
+        role !== "tutor" &&
+        item.ownerStudentId !== currentStudentId &&
+        privacyModeRef.current
+      ) {
+        renderPrivateFrame(ctx, item, zoom);
+        continue;
+      }
       renderItem(ctx, item, zoom, render);
     }
     if (livePathRef.current) renderPath(ctx, livePathRef.current);
@@ -1659,6 +1690,16 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       }
       if (payload.type === "lock_all") {
         itemsRef.current = itemsRef.current.map(it => ({ ...it, locked: payload.locked })) as DrawItem[];
+        render(); return;
+      }
+      if (payload.type === "privacy_mode") {
+        privacyModeRef.current = payload.enabled;
+        setPrivacyMode(payload.enabled);
+        render(); return;
+      }
+      if (payload.type === "reveal_all") {
+        privacyModeRef.current = false;
+        setPrivacyMode(false);
         render(); return;
       }
       if (payload.type === "video_sync") {
@@ -3545,6 +3586,37 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
                   <LockKeyholeOpen size={13}/>
                 </button>
+                <button
+                  onClick={() => {
+                    const next = !privacyModeRef.current;
+                    privacyModeRef.current = next;
+                    setPrivacyMode(next);
+                    send({ type: "privacy_mode", enabled: next });
+                    render();
+                  }}
+                  title={privacyMode ? "Режим конфиденциальности: ВКЛ — нажмите, чтобы выключить" : "Режим конфиденциальности: ВЫКЛ — нажмите, чтобы включить (скрывает личные фреймы от других)"}
+                  className="p-1.5 rounded-lg border-2 transition-all"
+                  style={{
+                    borderColor: privacyMode ? "#c07020" : "var(--brown-pale)",
+                    background:  privacyMode ? "#fff8e0" : "transparent",
+                    color: privacyMode ? "#c07020" : "var(--brown-dark)",
+                  }}>
+                  {privacyMode ? "🔒" : "🔓"}
+                </button>
+                {privacyMode && (
+                  <button
+                    onClick={() => {
+                      privacyModeRef.current = false;
+                      setPrivacyMode(false);
+                      send({ type: "reveal_all" });
+                      render();
+                    }}
+                    title="Показать всем — открыть все приватные фреймы"
+                    className="text-xs px-2 py-1 rounded-lg font-medium"
+                    style={{ background: "#fff8e0", color: "#c07020", border: "1px solid #c07020" }}>
+                    Показать всем
+                  </button>
+                )}
               </>
             )}
             <button title="Очистить доску — двойной клик" onDoubleClick={handleClear} onClick={()=>{}}
@@ -4135,6 +4207,31 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                   <span className="text-xs w-7 tabular-nums" style={{ color:"var(--brown-mid)" }}>
                     {(selectedItem as FrameItem).opacity ?? 100}%
                   </span>
+                  <div className="w-px h-4" style={{ background:"var(--brown-pale)" }}/>
+                  {/* Private frame toggle — visible to tutor (to assign) or student owner */}
+                  {(role === "tutor" || currentStudentId) && (() => {
+                    const fi = selectedItem as FrameItem;
+                    const isPrivate = !!fi.private;
+                    return (
+                      <button
+                        onClick={() => {
+                          const next = isPrivate
+                            ? { ...fi, private: false, ownerStudentId: undefined }
+                            : { ...fi, private: true, ownerStudentId: currentStudentId ?? fi.ownerStudentId };
+                          updateBoardItem(next);
+                        }}
+                        className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg border font-medium transition-all"
+                        style={{
+                          borderColor: isPrivate ? "#c07020" : "var(--brown-pale)",
+                          background:  isPrivate ? "#fff8e0" : "transparent",
+                          color:       isPrivate ? "#c07020" : "var(--brown-mid)",
+                        }}
+                        title={isPrivate ? "Фрейм приватный — нажмите, чтобы сделать общим" : "Сделать приватным — виден только владельцу"}
+                      >
+                        {isPrivate ? "🔒 Личный" : "🔓 Общий"}
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
               {/* Lock indicator */}
