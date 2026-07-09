@@ -3609,7 +3609,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 visibility: isDraggingThis ? "hidden" : undefined }}
               onMouseDown={e => {
                 e.stopPropagation();
-                setSelectedId(vi.id); setSelectedIds(new Set());
+                setSelectedId(vi.id); setSelectedIds(new Set([vi.id]));
+                if (!vi.locked) {
+                  const { cx, cy } = clientXY(e);
+                  const wp = s2w(cx, cy);
+                  selDragRef.current = { mode: "move", id: vi.id, wx0: wp.x, wy0: wp.y, origItem: { ...vi } };
+                }
               }}>
               <div className="w-full h-full overflow-hidden relative"
                 style={{ outline: selected ? "2px solid #4a80f0" : undefined }}>
