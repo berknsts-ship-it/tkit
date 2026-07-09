@@ -55,6 +55,17 @@ export default async function BoardPage({ searchParams }: Props) {
     todayLesson = lessonRes.data ?? null;
   }
 
+  let groupStudents: { id: string; name: string }[] = [];
+  if (groupId) {
+    const { data: gm } = await db
+      .from("group_members")
+      .select("students(id, name)")
+      .eq("group_id", groupId);
+    groupStudents = ((gm ?? []) as unknown as { students: { id: string; name: string } }[])
+      .map(m => m.students)
+      .filter(Boolean);
+  }
+
   const activeStudent = students.find(s => s.id === studentId);
   const activeGroup   = groups.find(g => g.id === groupId);
 
@@ -111,6 +122,7 @@ export default async function BoardPage({ searchParams }: Props) {
           snapshots={studentId ? snapshots : []}
           todayLessonId={todayLesson?.id}
           isGroup={!!groupId}
+          groupStudents={groupStudents}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
