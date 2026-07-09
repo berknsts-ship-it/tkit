@@ -47,6 +47,8 @@ type FrameItem = {
   opacity?: number;
   private?: boolean;
   ownerStudentId?: string;
+  ownerName?: string;
+  ownerColor?: string;
   locked?: boolean; pdfPage?: number;
 };
 type ImageItem = {
@@ -127,7 +129,8 @@ type WsEvent =
   | { type: "lock_all"; locked: boolean }
   | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number }
   | { type: "privacy_mode"; enabled: boolean }
-  | { type: "reveal_all" };
+  | { type: "reveal_all" }
+  | { type: "hide_all" };
 
 // ── image cache ───────────────────────────────────────────────────────────────
 const imgCache = new Map<string, HTMLImageElement>();
@@ -172,6 +175,7 @@ const RULING_OPTIONS: { v: Ruling; title: string }[] = [
 ];
 function isPdf(n: string | null) { return n?.split(".").pop()?.toLowerCase() === "pdf"; }
 function uid() { return Math.random().toString(36).slice(2, 10); }
+const FRAME_COLORS = ["#4a80f0","#e05050","#20a060","#e08020","#8060d0","#d04090","#20a0a0","#806030"];
 
 const SHAPE_KINDS: { v: ShapeKind; label: string; icon: string }[] = [
   { v: "line",          label: "Линия",            icon: "╱"  },
@@ -584,31 +588,57 @@ function frameShapePath(ctx: CanvasRenderingContext2D, item: FrameItem) {
     ctx.closePath();
   }
 }
-function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem) {
+function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom = 1) {
   ctx.save();
   if (item.opacity !== undefined && item.opacity < 100) ctx.globalAlpha = item.opacity / 100;
   const bw = item.borderWidth ?? 2;
-  ctx.fillStyle = item.bgColor;
-  ctx.strokeStyle = item.color;
+  const borderColor = item.ownerColor ?? item.color;
+  ctx.fillStyle = item.ownerColor ? item.ownerColor + "22" : item.bgColor;
+  ctx.strokeStyle = borderColor;
   ctx.lineWidth = bw;
   frameShapePath(ctx, item);
   ctx.fill();
   ctx.stroke();
+
+  if (item.ownerName) {
+    const pad = 8 / zoom;
+    const fs = Math.max(10 / zoom, Math.min(13 / zoom, item.h * 0.09));
+    const r = fs * 0.72;
+    const cx = item.x + pad + r;
+    const cy = item.y + pad + r;
+    // avatar circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = borderColor;
+    ctx.globalAlpha = (item.opacity !== undefined && item.opacity < 100) ? (item.opacity / 100) : 1;
+    ctx.fill();
+    // initial letter
+    ctx.fillStyle = "#fff";
+    ctx.font = `bold ${r * 1.1}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(item.ownerName[0].toUpperCase(), cx, cy);
+    // name text
+    ctx.fillStyle = borderColor;
+    ctx.font = `bold ${fs}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(item.ownerName, item.x + pad + r * 2 + 4 / zoom, cy);
+  }
   ctx.restore();
 }
 function renderPrivateFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom: number) {
   ctx.save();
+  ctx.filter = "blur(4px)";
+  ctx.globalAlpha = 0.2;
   const bw = item.borderWidth ?? 2;
-  ctx.fillStyle = "#e8e8e8";
-  ctx.strokeStyle = item.color;
+  const borderColor = item.ownerColor ?? item.color;
+  ctx.fillStyle = item.ownerColor ? item.ownerColor + "33" : "#e8e8e8";
+  ctx.strokeStyle = borderColor;
   ctx.lineWidth = bw;
   frameShapePath(ctx, item);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = "#999";
-  ctx.font = `${Math.round(Math.min(item.w, item.h) * 0.3 / zoom)}px sans-serif`;
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText("🔒", item.x + item.w / 2, item.y + item.h / 2);
   ctx.restore();
 }
 function renderImage(ctx: CanvasRenderingContext2D, item: ImageItem, onLoad: () => void) {
@@ -920,7 +950,7 @@ function renderItem(ctx: CanvasRenderingContext2D, item: DrawItem, zoom: number,
   if (item.type === "path")    { renderPath(ctx, item); if (item.locked) { /* paths: no badge */ } return; }
   if (item.type === "image")   { renderImage(ctx, item, onLoad ?? (() => {})); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
   if (item.type === "shape")   { renderShape(ctx, item); if (item.locked) drawLockBadge(ctx, Math.max(item.x1,item.x2) - 14/zoom, Math.min(item.y1,item.y2) + 2/zoom, zoom); return; }
-  if (item.type === "frame")   { renderFrame(ctx, item); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
+  if (item.type === "frame")   { renderFrame(ctx, item, zoom); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
   if (item.type === "function") { renderFunction(ctx, item, zoom); return; }
   if (item.type === "video") {
     ctx.save();
@@ -1292,7 +1322,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
           shape: frameShapeRef.current, title: "",
           color: frameColorRef.current, bgColor: frameFillRef.current,
           opacity: frameOpacityRef.current, borderWidth: frameBorderWidthRef.current,
-        });
+        }, zoom);
       }
     }
     ctx.restore();
@@ -1698,8 +1728,19 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         render(); return;
       }
       if (payload.type === "reveal_all") {
+        itemsRef.current = itemsRef.current.map(it =>
+          it.type === "frame" && (it as FrameItem).private ? { ...it, private: false } : it
+        ) as DrawItem[];
         privacyModeRef.current = false;
         setPrivacyMode(false);
+        render(); return;
+      }
+      if (payload.type === "hide_all") {
+        itemsRef.current = itemsRef.current.map(it =>
+          it.type === "frame" && (it as FrameItem).ownerStudentId ? { ...it, private: true } : it
+        ) as DrawItem[];
+        privacyModeRef.current = true;
+        setPrivacyMode(true);
         render(); return;
       }
       if (payload.type === "video_sync") {
@@ -3586,36 +3627,77 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
                   <LockKeyholeOpen size={13}/>
                 </button>
-                <button
-                  onClick={() => {
-                    const next = !privacyModeRef.current;
-                    privacyModeRef.current = next;
-                    setPrivacyMode(next);
-                    send({ type: "privacy_mode", enabled: next });
-                    render();
-                  }}
-                  title={privacyMode ? "Режим конфиденциальности: ВКЛ — нажмите, чтобы выключить" : "Режим конфиденциальности: ВЫКЛ — нажмите, чтобы включить (скрывает личные фреймы от других)"}
-                  className="p-1.5 rounded-lg border-2 transition-all"
-                  style={{
-                    borderColor: privacyMode ? "#c07020" : "var(--brown-pale)",
-                    background:  privacyMode ? "#fff8e0" : "transparent",
-                    color: privacyMode ? "#c07020" : "var(--brown-dark)",
-                  }}>
-                  {privacyMode ? "🔒" : "🔓"}
-                </button>
-                {privacyMode && (
-                  <button
-                    onClick={() => {
-                      privacyModeRef.current = false;
-                      setPrivacyMode(false);
-                      send({ type: "reveal_all" });
-                      render();
-                    }}
-                    title="Показать всем — открыть все приватные фреймы"
-                    className="text-xs px-2 py-1 rounded-lg font-medium"
-                    style={{ background: "#fff8e0", color: "#c07020", border: "1px solid #c07020" }}>
-                    Показать всем
-                  </button>
+                {students.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const cols = Math.min(students.length, 3);
+                        const fw = 280, fh = 200, gap = 24;
+                        const totalW = cols * fw + (cols - 1) * gap;
+                        const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
+                        const canvas = canvasRef.current;
+                        const vw = (canvas?.offsetWidth ?? 800) / vz;
+                        const vh = (canvas?.offsetHeight ?? 600) / vz;
+                        const sx = -vpx / vz + (vw - totalW) / 2;
+                        const sy = -vpy / vz + (vh - Math.ceil(students.length / cols) * (fh + gap)) / 2;
+                        students.forEach((s, i) => {
+                          const col = i % cols, row = Math.floor(i / cols);
+                          const oc = FRAME_COLORS[i % FRAME_COLORS.length];
+                          const item: FrameItem = {
+                            type:"frame", id:uid(),
+                            x: sx + col * (fw + gap), y: sy + row * (fh + gap),
+                            w: fw, h: fh, shape:"rounded", title: s.name,
+                            color: oc, bgColor: oc + "22",
+                            ownerName: s.name, ownerColor: oc, ownerStudentId: s.id,
+                            private: true, borderWidth: 2,
+                          };
+                          itemsRef.current.push(item);
+                          send({ type:"path", item });
+                        });
+                        privacyModeRef.current = true;
+                        setPrivacyMode(true);
+                        send({ type:"privacy_mode", enabled: true });
+                        render();
+                      }}
+                      title="Создать личный фрейм для каждого ученика группы"
+                      className="text-xs px-2 py-1 rounded-lg font-medium border"
+                      style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)", background:"transparent" }}>
+                      + Фреймы
+                    </button>
+                    {privacyMode ? (
+                      <button
+                        onClick={() => {
+                          itemsRef.current = itemsRef.current.map(it =>
+                            it.type === "frame" && (it as FrameItem).private ? { ...it, private: false } : it
+                          ) as DrawItem[];
+                          privacyModeRef.current = false;
+                          setPrivacyMode(false);
+                          send({ type: "reveal_all" });
+                          render();
+                        }}
+                        title="Показать всем — открыть все приватные фреймы"
+                        className="text-xs px-2 py-1 rounded-lg font-medium"
+                        style={{ background:"#fff8e0", color:"#c07020", border:"1px solid #c07020" }}>
+                        Показать всем
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          itemsRef.current = itemsRef.current.map(it =>
+                            it.type === "frame" && (it as FrameItem).ownerStudentId ? { ...it, private: true } : it
+                          ) as DrawItem[];
+                          privacyModeRef.current = true;
+                          setPrivacyMode(true);
+                          send({ type: "hide_all" });
+                          render();
+                        }}
+                        title="Скрыть ответы — личные фреймы видны только владельцам"
+                        className="text-xs px-2 py-1 rounded-lg font-medium border"
+                        style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)", background:"transparent" }}>
+                        Скрыть ответы
+                      </button>
+                    )}
+                  </>
                 )}
               </>
             )}
