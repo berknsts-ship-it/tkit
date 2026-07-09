@@ -126,6 +126,13 @@ export default function BoardView({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    const nav = document.querySelector("[data-tutor-nav]") as HTMLElement | null;
+    if (!nav) return;
+    nav.style.display = fullscreen ? "none" : "";
+    return () => { nav.style.display = ""; };
+  }, [fullscreen]);
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Переключатель */}

@@ -57,7 +57,7 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, sub
 
   return (
     <>
-      <nav className="sticky top-0 z-50 border-b" style={{
+      <nav data-tutor-nav className="sticky top-0 z-50 border-b" style={{
         background: "var(--nav-bg)",
         borderColor: "var(--brown-pale)",
         boxShadow: "var(--shadow-nav)",
