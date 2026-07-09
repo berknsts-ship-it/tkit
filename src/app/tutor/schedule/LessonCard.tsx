@@ -50,7 +50,6 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
   const [rescheduledTo, setRescheduledTo] = useState(lesson.rescheduled_to ?? null);
 
-  // edit form state — initialised from current lesson values
   const initDt = new Date(lesson.scheduled_at);
   const pad = (n: number) => String(n).padStart(2, "0");
   const initDate = `${initDt.getFullYear()}-${pad(initDt.getMonth()+1)}-${pad(initDt.getDate())}`;
@@ -122,12 +121,46 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
 
   const inputStyle = { borderColor: "var(--brown-pale)", background: "#fdf8f0", color: "var(--brown-dark)" };
 
+  const statusDropdown = (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        disabled={loading}
+        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80"
+        style={{ background: cfg.bg, color: cfg.color }}>
+        {loading ? "..." : cfg.label}
+        {status === "rescheduled" && rescheduledTo && (
+          <span className="ml-1 font-normal">
+            → {new Date(rescheduledTo).toLocaleDateString("ru", { day:"numeric", month:"short" })}
+          </span>
+        )}
+        <ChevronDown size={11} style={{ opacity: 0.7 }} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-20 rounded-xl border shadow-xl overflow-hidden min-w-[160px]"
+            style={{ background: "white", borderColor: "var(--brown-pale)" }}>
+            {ACTIONS.filter(a => a.status !== status).map(a => (
+              <button key={a.status} onClick={() => changeStatus(a.status)}
+                className="w-full text-left px-4 py-2.5 text-sm hover:opacity-80 transition-all border-b last:border-0"
+                style={{ borderColor: "var(--brown-pale)", color: STATUS_CONFIG[a.status].color }}>
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="rounded-xl border overflow-visible"
       style={{ background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)", opacity: status !== "scheduled" ? 0.78 : 1 }}>
-      <div className="flex items-center gap-3 p-4">
+
+      <div className="flex items-start gap-3 p-4">
         {/* Дата */}
-        <div className="text-center min-w-[48px] shrink-0">
+        <div className="text-center min-w-[44px] shrink-0 pt-0.5">
           <div className="text-xs font-medium" style={{ color: "var(--brown-light)" }}>
             {dt.toLocaleDateString("ru", { weekday: "short" })}
           </div>
@@ -139,96 +172,71 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
           </div>
         </div>
 
-        <div className="w-px h-12 shrink-0" style={{ background: "var(--brown-pale)" }} />
+        <div className="w-px self-stretch shrink-0" style={{ background: "var(--brown-pale)" }} />
 
-        {/* Инфо */}
-        <div className="flex-1 min-w-0">
-          <div className="font-medium flex items-center gap-1.5 flex-wrap" style={{ color: "var(--brown-dark)" }}>
-            {lesson.students?.name ?? "Ученик"}
-            {lesson.groups?.name && (
-              <span className="text-xs px-1.5 py-0.5 rounded-md font-medium"
-                style={{ background: "#eef4ff", color: "#2060d0", border: "1px solid #c8d8f8" }}>
-                👥 {lesson.groups.name}
-              </span>
-            )}
+        {/* Основной контент */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          {/* Строка 1: имя ученика + статус */}
+          <div className="flex items-start gap-2">
+            <div className="font-medium flex items-center gap-1.5 flex-wrap flex-1 min-w-0" style={{ color: "var(--brown-dark)" }}>
+              {lesson.students?.name ?? lesson.groups?.name ?? "Ученик"}
+              {lesson.groups?.name && lesson.students?.name && (
+                <span className="text-xs px-1.5 py-0.5 rounded-md font-medium"
+                  style={{ background: "#eef4ff", color: "#2060d0", border: "1px solid #c8d8f8" }}>
+                  👥 {lesson.groups.name}
+                </span>
+              )}
+            </div>
+            {statusDropdown}
           </div>
+
+          {/* Строка 2: время + длительность + цена */}
           <div className="text-sm" style={{ color: "var(--brown-mid)" }}>
             {dt.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
             {lesson.duration_min ? ` · ${lesson.duration_min} мин` : ""}
             {lesson.price_rub ? ` · ${lesson.price_rub} ₽` : ""}
           </div>
+
           {lesson.notes && (
-            <div className="text-xs mt-0.5 truncate" style={{ color: "var(--brown-light)" }}>
+            <div className="text-xs truncate" style={{ color: "var(--brown-light)" }}>
               {lesson.notes}
             </div>
           )}
-        </div>
 
-        {/* Редактировать / Удалить */}
-        <button
-          onClick={() => setEditMode(m => !m)}
-          title="Редактировать"
-          className="shrink-0 p-1.5 rounded-lg border hover:opacity-70 transition-all"
-          style={{ borderColor: editMode ? "var(--brown-dark)" : "var(--brown-pale)", color: "var(--brown-mid)" }}>
-          <Pencil size={13}/>
-        </button>
-        <button
-          onClick={async () => {
-            if (!window.confirm("Удалить урок?")) return;
-            await deleteLesson(lesson.id);
-          }}
-          title="Удалить"
-          className="shrink-0 p-1.5 rounded-lg border hover:opacity-70 transition-all"
-          style={{ borderColor: "var(--brown-pale)", color: "#e05030" }}>
-          <Trash2 size={13}/>
-        </button>
-
-        {/* Оплата */}
-        {!isCancelled && !confirmPay && (
-          <button
-            onClick={handleTogglePay}
-            disabled={payLoading}
-            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
-            style={{
-              background: payStatus === "paid" ? "#d8f5e0" : "#fff3e0",
-              color:      payStatus === "paid" ? "#1a7a3a" : "#c07800",
-              border:     `1.5px solid ${payStatus === "paid" ? "#b0e8c0" : "#f0d090"}`,
-            }}>
-            {payLoading ? "..." : payStatus === "paid" ? "✓ Оплачено" : "₽ Не оплачено"}
-          </button>
-        )}
-
-        {/* Статус + меню */}
-        <div className="relative shrink-0">
-          <button
-            onClick={() => setOpen(o => !o)}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
-            style={{ background: cfg.bg, color: cfg.color }}>
-            {loading ? "..." : cfg.label}
-            {status === "rescheduled" && rescheduledTo && (
-              <span className="ml-1 font-normal">
-                → {new Date(rescheduledTo).toLocaleDateString("ru", { day:"numeric", month:"short" })}
-              </span>
+          {/* Строка 3: кнопки действий */}
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+            {!isCancelled && !confirmPay && (
+              <button
+                onClick={handleTogglePay}
+                disabled={payLoading}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80"
+                style={{
+                  background: payStatus === "paid" ? "#d8f5e0" : "#fff3e0",
+                  color:      payStatus === "paid" ? "#1a7a3a" : "#c07800",
+                  border:     `1.5px solid ${payStatus === "paid" ? "#b0e8c0" : "#f0d090"}`,
+                }}>
+                {payLoading ? "..." : payStatus === "paid" ? "✓ Оплачено" : "₽ Не оплачено"}
+              </button>
             )}
-            <ChevronDown size={12} style={{ opacity: 0.7 }} />
-          </button>
-
-          {open && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-20 rounded-xl border shadow-xl overflow-hidden min-w-[160px]"
-                style={{ background: "white", borderColor: "var(--brown-pale)" }}>
-                {ACTIONS.filter(a => a.status !== status).map(a => (
-                  <button key={a.status} onClick={() => changeStatus(a.status)}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:opacity-80 transition-all border-b last:border-0"
-                    style={{ borderColor: "var(--brown-pale)", color: STATUS_CONFIG[a.status].color }}>
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+            <div className="flex-1"/>
+            <button
+              onClick={() => setEditMode(m => !m)}
+              title="Редактировать"
+              className="p-1.5 rounded-lg border hover:opacity-70 transition-all"
+              style={{ borderColor: editMode ? "var(--brown-dark)" : "var(--brown-pale)", color: "var(--brown-mid)" }}>
+              <Pencil size={13}/>
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm("Удалить урок?")) return;
+                await deleteLesson(lesson.id);
+              }}
+              title="Удалить"
+              className="p-1.5 rounded-lg border hover:opacity-70 transition-all"
+              style={{ borderColor: "var(--brown-pale)", color: "#e05030" }}>
+              <Trash2 size={13}/>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -266,6 +274,7 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
           </button>
         </div>
       )}
+
       {/* Инлайн-форма редактирования */}
       {editMode && (
         <div className="border-t px-4 pb-4 pt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"

@@ -51,27 +51,29 @@ export default async function VocabularyPage() {
             const wordCount = (t.vocabulary_words as { count: number }[])?.[0]?.count ?? 0;
             const student = t.students as { name: string } | null;
             return (
-              <div key={t.id} className="rounded-xl border p-4 flex items-center gap-4" style={card}>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium" style={{ color: "var(--brown-dark)" }}>{t.title}</div>
-                  <div className="text-sm mt-0.5" style={{ color: "var(--brown-light)" }}>
-                    {wordCount} слов · {student ? student.name : "Для всех"}
+              <div key={t.id} className="rounded-xl border p-4 flex flex-col gap-3" style={card}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium" style={{ color: "var(--brown-dark)" }}>{t.title}</div>
+                    <div className="text-sm mt-0.5" style={{ color: "var(--brown-light)" }}>
+                      {wordCount} слов · {student ? student.name : "Для всех"}
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 flex-wrap">
+                  <Link href={`/tutor/vocabulary/practice?topic=${t.id}`}
+                    className="flex-1 text-center text-sm px-3 py-2 rounded-lg font-semibold hover:opacity-80 transition-all text-white"
+                    style={{ background: "var(--gradient-primary)", minWidth: 120 }}>
+                    ▶ Тренировать
+                  </Link>
                   <Link href={`/tutor/vocabulary/${t.id}`}
-                    className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all"
+                    className="flex items-center justify-center gap-1 text-sm px-3 py-2 rounded-lg font-medium hover:opacity-80 transition-all"
                     style={{ background: "var(--brown-pale)", color: "var(--brown-dark)" }}>
                     <Pencil size={13}/> Изменить
                   </Link>
-                  <Link href={`/tutor/vocabulary/practice?topic=${t.id}`}
-                    className="text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-80 transition-all border"
-                    style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
-                    Тренировать
-                  </Link>
                   <form action={async () => { "use server"; await deleteTopic(t.id); }}>
                     <button type="submit"
-                      className="text-sm px-3 py-1 rounded-lg border hover:opacity-70 transition-all"
+                      className="text-sm px-3 py-2 rounded-lg border hover:opacity-70 transition-all"
                       style={{ borderColor: "#f0c0b0", color: "#c06040" }}>
                       Удалить
                     </button>
