@@ -217,8 +217,9 @@ export default function BoardView({
         }>
           {/* Fullscreen exit bar */}
           {fullscreen && (
-            <div className="flex items-center justify-end px-3 py-1.5 shrink-0 border-b"
-              style={{ background: "#fdf8f0", borderColor: "var(--brown-pale)" }}>
+            <div className="flex items-center justify-end px-3 shrink-0 border-b"
+              style={{ background: "#fdf8f0", borderColor: "var(--brown-pale)",
+                paddingTop: "calc(0.375rem + env(safe-area-inset-top))", paddingBottom: "0.375rem" }}>
               <button onClick={() => setFullscreen(false)} title="Свернуть (Escape)"
                 className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg border font-medium"
                 style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)", background: "white" }}>

@@ -2334,7 +2334,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       eraseAt(touchDrawPending.current.wx, touchDrawPending.current.wy);
     }
     touchDrawPending.current = null;
-    if (e.touches.length < 2 && panning.current) {
+    if (e.touches.length === 1 && !panning.current) {
+      // One finger remains after pinch — re-enable panning from current finger position
+      const r = containerRef.current!.getBoundingClientRect();
+      const cx = e.touches[0].clientX - r.left;
+      const cy = e.touches[0].clientY - r.top;
+      panning.current = true;
+      panOrigin.current = { cx, cy, vx: viewRef.current.panX, vy: viewRef.current.panY };
+      lastPanPt.current = { cx, cy, t: Date.now() };
+    } else if (e.touches.length < 2 && panning.current) {
       panning.current = false;
       const last = lastPanPt.current;
       if (last && e.changedTouches.length > 0) {
@@ -2814,6 +2822,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [pickerPos, setPickerPos] = useState<{ x: number; y: number } | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
+  const [kbOffset, setKbOffset] = useState(0);
+
   // ── dice ─────────────────────────────────────────────────────────────────────
   const rollDice = () => {
     setDiceRolling(true);
@@ -3254,6 +3264,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     setPickerPos(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  useEffect(() => {
+    if (textInput === null) { setKbOffset(0); return; }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setKbOffset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
+  }, [textInput]);
 
   useEffect(() => {
     setShowShapeMenu(false); setShowFrameMenu(false); setShowMoreTools(false);
@@ -4235,10 +4256,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                     <button key={c}
                       onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                       onClick={() => updateBoardItem({...selectedItem as TextItem, color: c})}
-                      className="w-5 h-5 rounded-full shrink-0 border-2"
+                      className="w-8 h-8 rounded-full shrink-0 border-2"
                       style={{ background: c, borderColor: (selectedItem as TextItem).color === c ? "#4a80f0" : "var(--brown-pale)" }}/>
                   ))}
-                  <label className="relative w-5 h-5 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
+                  <label className="relative w-8 h-8 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
                     title="Другой цвет"
                     style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}>
                     <input type="color" value={(selectedItem as TextItem).color}
@@ -4321,7 +4342,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                 <div className="sm:hidden absolute pointer-events-auto flex items-center gap-1.5 px-2 py-1 rounded-xl shadow-lg border"
                   style={{ top: tl.y > 50 ? -44 : sh + 8, left:"50%", transform:"translateX(-50%)", background:"white",
                     borderColor:"var(--brown-pale)", whiteSpace:"nowrap", zIndex:35 }}
-                  onMouseDown={e => e.stopPropagation()}>
+                  onMouseDown={e => e.stopPropagation()}
+                  onTouchStart={e => e.stopPropagation()}
+                  onTouchEnd={e => e.stopPropagation()}>
                   {/* Border color */}
                   <label className="w-6 h-6 rounded-full border-2 cursor-pointer overflow-hidden"
                     style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).color }}
@@ -4545,10 +4568,11 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   <div style={{ position:"fixed", inset:0, zIndex:300, touchAction:"auto" }} onClick={cancel}
                     onTouchStart={e=>e.stopPropagation()} onTouchMove={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}>
                     <div style={{
-                      position:"absolute", bottom:0, left:0, right:0,
+                      position:"absolute", bottom:kbOffset, left:0, right:0,
                       background:"white", borderRadius:"20px 20px 0 0",
                       borderTop:"2px solid #e8ddd2",
                       boxShadow:"0 -4px 24px rgba(0,0,0,0.15)",
+                      transition:"bottom 0.15s ease",
                     }} onClick={e => e.stopPropagation()}>
                       {/* Controls */}
                       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 12px", borderBottom:"1px solid #e8ddd2", overflowX:"auto", touchAction:"pan-x" }}>
@@ -4589,7 +4613,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                           rows={2}
                           style={{
                             width:"100%", boxSizing:"border-box",
-                            fontSize: Math.min(fontSize, 28)+"px",
+                            fontSize: Math.max(16, Math.min(fontSize, 28))+"px",
                             fontFamily: FONTS[fontIdx].family,
                             fontWeight: bold?"bold":"normal",
                             fontStyle: italic?"italic":"normal",
@@ -4660,6 +4684,25 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                       const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);cropDragRef.current=null;};
                       cropDragRef.current={move:onMove,up:onUp};
                       window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+                    }}
+                    onTouchStart={e => {
+                      e.stopPropagation(); e.preventDefault();
+                      const t0=e.touches[0];
+                      const startX=t0.clientX, startY=t0.clientY;
+                      const orig={...cropRef.current!};
+                      const onMove=(te:TouchEvent)=>{
+                        const t=te.touches[0];
+                        const dx=(t.clientX-startX)/sw, dy=(t.clientY-startY)/sh;
+                        const c2=cropRef.current!;
+                        if(hx===0) c2.sx=Math.max(0,Math.min(orig.sx+dx,c2.ex-0.05));
+                        if(hx===1) c2.ex=Math.min(1,Math.max(orig.ex+dx,c2.sx+0.05));
+                        if(hy===0) c2.sy=Math.max(0,Math.min(orig.sy+dy,c2.ey-0.05));
+                        if(hy===1) c2.ey=Math.min(1,Math.max(orig.ey+dy,c2.sy+0.05));
+                        setPanVer(v=>v+1);
+                      };
+                      const onUp=()=>{window.removeEventListener("touchmove",onMove);window.removeEventListener("touchend",onUp);cropDragRef.current=null;};
+                      cropDragRef.current={move:onMove as unknown as (e:MouseEvent)=>void, up:onUp};
+                      window.addEventListener("touchmove",onMove,{passive:false}); window.addEventListener("touchend",onUp);
                     }}/>
                 ))}
               </div>
@@ -5434,7 +5477,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       )}
 
       {/* Mobile toolbar */}
-      <div className="flex sm:hidden flex-col border-t shrink-0" data-no-prevent style={{ borderColor:"var(--brown-pale)", background:"white" }}
+      <div className="flex sm:hidden flex-col border-t shrink-0" data-no-prevent style={{ borderColor:"var(--brown-pale)", background:"white", paddingBottom:"env(safe-area-inset-bottom)" }}
         onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
         {/* Row 1: tools + controls */}
         <div className="flex items-center gap-1 px-2 py-1.5 border-b overflow-x-auto" style={{ borderColor:"var(--brown-pale)", touchAction:"pan-x" }}>
