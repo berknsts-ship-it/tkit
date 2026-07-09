@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 
-const SUPPORT_EMAIL = "tkit.support@gmail.com";
+const SUPPORT_EMAIL = process.env.CREATOR_EMAIL ?? "tkit.support@gmail.com";
 
 export async function submitSupportMessage(formData: FormData) {
   const email = (formData.get("email") as string)?.trim() || null;
