@@ -21,9 +21,10 @@ export async function submitSupportMessage(formData: FormData) {
     await resend.emails.send({
       from: "T-Kit Support <onboarding@resend.dev>",
       to: SUPPORT_EMAIL,
+      ...(email ? { reply_to: email } : {}),
       subject: "Новое сообщение в поддержку T-Kit",
       text: [
-        email ? `От: ${email}` : "От: (без email)",
+        email ? `От: ${email}` : "От: (без email — ответить нельзя)",
         "",
         message,
       ].join("\n"),
