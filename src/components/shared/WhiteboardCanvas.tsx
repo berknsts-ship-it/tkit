@@ -1143,6 +1143,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   const [aiLoading,   setAiLoading]   = useState(false);
   const aiInputRef = useRef<HTMLInputElement>(null);
   const [imgError,     setImgError]     = useState<string | null>(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
+  const [videoUploadError,    setVideoUploadError]    = useState<string | null>(null);
 
   // shape tool
   const [shapeKind,     setShapeKind]     = useState<ShapeKind>("rect");
@@ -2483,13 +2485,38 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
   };
 
   const uploadAndAddVideo = async (file: File) => {
-    const form = new FormData(); form.append("file", file);
+    setVideoUploadProgress(0);
+    setVideoUploadError(null);
     try {
-      const res = await fetch("/api/board/image", { method: "POST", body: form });
-      if (!res.ok) return;
-      const { url } = await res.json();
-      addVideoToBoard(url);
-    } catch { /* ignore network errors */ }
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
+      const res = await fetch("/api/board/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ext }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setVideoUploadError(err.error ?? "Ошибка подготовки загрузки");
+        setVideoUploadProgress(null); return;
+      }
+      const { signedUrl, publicUrl, contentType } = await res.json();
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setVideoUploadProgress(Math.round(e.loaded / e.total * 100));
+        };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`${xhr.status}`));
+        xhr.onerror = () => reject(new Error("Ошибка сети"));
+        xhr.open("PUT", signedUrl);
+        xhr.setRequestHeader("Content-Type", contentType);
+        xhr.send(file);
+      });
+      addVideoToBoard(publicUrl);
+    } catch (err) {
+      setVideoUploadError(err instanceof Error ? err.message : "Ошибка загрузки");
+    } finally {
+      setVideoUploadProgress(null);
+    }
   };
 
 
@@ -4602,6 +4629,27 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Video upload progress */}
+        {(videoUploadProgress !== null || videoUploadError) && (
+          <div className="fixed bottom-20 left-1/2 z-[9000] -translate-x-1/2 rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 text-sm"
+            data-no-prevent style={{ background: videoUploadError ? "#fee2e2" : "white", border: `1px solid ${videoUploadError ? "#fca5a5" : "var(--brown-pale)"}`, minWidth: 220 }}>
+            {videoUploadError ? (
+              <>
+                <span style={{ color: "#dc2626" }}>✕ {videoUploadError}</span>
+                <button onClick={() => setVideoUploadError(null)} style={{ color: "#dc2626", marginLeft: "auto" }}>✕</button>
+              </>
+            ) : (
+              <>
+                <span style={{ color: "var(--brown-dark)" }}>Загрузка видео...</span>
+                <div className="flex-1 rounded-full overflow-hidden h-1.5" style={{ background: "var(--brown-pale)", minWidth: 80 }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${videoUploadProgress}%`, background: "var(--gradient-primary)" }}/>
+                </div>
+                <span className="font-bold tabular-nums" style={{ color: "var(--brown-dark)" }}>{videoUploadProgress}%</span>
+              </>
+            )}
           </div>
         )}
 
