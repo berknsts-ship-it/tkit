@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, useCallback } from "react";
+import { useRef, useState, useTransition, useCallback, useEffect } from "react";
 import WhiteboardCanvas, { BoardMaterial, WhiteboardRef } from "@/components/shared/WhiteboardCanvas";
 import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
@@ -120,6 +120,12 @@ export default function BoardView({
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("ru", { day: "numeric", month: "long", year: "numeric" });
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Переключатель */}
@@ -166,16 +172,30 @@ export default function BoardView({
               <Save size={13}/> <span className="hidden sm:inline">Сохранить конспект</span><span className="sm:hidden">Сохранить</span>
             </button>
           )}
-          <button onClick={() => setShowHistory(h => !h)}
-            className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80 shrink-0"
-            style={{ borderColor: showHistory ? "var(--brown-dark)" : "var(--brown-pale)",
-                     color: "var(--brown-dark)", background: showHistory ? "var(--brown-pale)" : "transparent",
-                     marginLeft: "auto" }}>
-            <BookOpen size={13}/> <span className="hidden sm:inline">История {snapshots.length > 0 && `(${snapshots.length})`}</span>
-            <span className="sm:hidden">{snapshots.length > 0 ? snapshots.length : ""}</span>
-            <ChevronRight size={12} style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
-          </button>
+          {/* История + fullscreen в одной правой группе */}
+          <div className="flex items-center gap-1 shrink-0" style={{ marginLeft: "auto" }}>
+            <button onClick={() => setShowHistory(h => !h)}
+              className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80 shrink-0"
+              style={{ borderColor: showHistory ? "var(--brown-dark)" : "var(--brown-pale)",
+                       color: "var(--brown-dark)", background: showHistory ? "var(--brown-pale)" : "transparent" }}>
+              <BookOpen size={13}/> <span className="hidden sm:inline">История {snapshots.length > 0 && `(${snapshots.length})`}</span>
+              <span className="sm:hidden">{snapshots.length > 0 ? snapshots.length : ""}</span>
+              <ChevronRight size={12} style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
+            </button>
+            <button onClick={() => setFullscreen(true)} title="На весь экран"
+              className="p-1.5 rounded-lg border shrink-0"
+              style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
+              <Maximize2 size={14}/>
+            </button>
+          </div>
         </>}
+        {mode === "builtin" && isGroup && (
+          <button onClick={() => setFullscreen(true)} title="На весь экран"
+            className="p-1.5 rounded-lg border shrink-0"
+            style={{ marginLeft: "auto", borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
+            <Maximize2 size={14}/>
+          </button>
+        )}
         {!(mode === "builtin") && (
           <span className="hidden sm:inline ml-auto text-xs" style={{ color: "var(--brown-light)" }}>
             Ученик видит встроенную доску в своём кабинете
@@ -185,22 +205,24 @@ export default function BoardView({
 
       {mode === "builtin" && (
         <div className={fullscreen
-          ? "fixed inset-0 z-50 flex flex-col"
+          ? "fixed inset-0 z-[100] flex flex-col"
           : "flex flex-1 overflow-hidden"
         }>
+          {/* Fullscreen exit bar */}
+          {fullscreen && (
+            <div className="flex items-center justify-end px-3 py-1.5 shrink-0 border-b"
+              style={{ background: "#fdf8f0", borderColor: "var(--brown-pale)" }}>
+              <button onClick={() => setFullscreen(false)} title="Свернуть (Escape)"
+                className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg border font-medium"
+                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)", background: "white" }}>
+                <Minimize2 size={14}/> <span>Свернуть</span>
+              </button>
+            </div>
+          )}
           {/* Canvas area */}
           <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
             <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative" style={{ minHeight: "40vh" }}>
               <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} students={groupStudents} />
-              {/* Fullscreen toggle */}
-              <button
-                onClick={() => setFullscreen(v => !v)}
-                className="absolute top-2 right-2 z-40 p-1.5 rounded-lg border shadow-sm pointer-events-auto"
-                style={{ background: "white", borderColor: "var(--brown-pale)" }}
-                title={fullscreen ? "Свернуть" : "На весь экран"}
-              >
-                {fullscreen ? <Minimize2 size={14} style={{ color: "var(--brown-dark)" }}/> : <Maximize2 size={14} style={{ color: "var(--brown-dark)" }}/>}
-              </button>
             </div>
             <SyncedAudio roomId={roomId} role="tutor" />
             <SyncedVideo roomId={roomId} role="tutor" />
