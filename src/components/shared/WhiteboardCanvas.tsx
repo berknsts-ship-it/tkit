@@ -4082,8 +4082,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   {locked ? <Unlock size={13} color="white"/> : <Lock size={13} color="white"/>}
                 </button>
               )}
-              {/* Duplicate + Crop + Color + Layer + Delete buttons — flip below item if near top of canvas */}
-              <div className="absolute pointer-events-auto flex items-center gap-1"
+              {/* Duplicate + Layer + Delete — desktop: bottom bar. Touch: keep floating */}
+              <div className="sm:hidden absolute pointer-events-auto flex items-center gap-1"
                 style={{ top: tl.y > 36 ? -28 : sh + 4, right:0, zIndex:36 }}>
                 <button onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
@@ -4165,9 +4165,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   <Pencil size={14} color="white"/>
                 </button>
               )}
-              {/* Text color panel — below the selection */}
+              {/* Text color panel — below the selection (mobile only — desktop uses bottom bar) */}
               {selectedItem.type === "text" && !locked && (
-                <div className="absolute pointer-events-auto flex items-center gap-1 px-2 py-1 rounded-xl border shadow-md"
+                <div className="sm:hidden absolute pointer-events-auto flex items-center gap-1 px-2 py-1 rounded-xl border shadow-md"
                   style={{ top: sh + 6, left: 0, background:"white", borderColor:"var(--brown-pale)", zIndex:35, whiteSpace:"nowrap" }}
                   onMouseDown={e => e.stopPropagation()}
                   onTouchStart={e => e.stopPropagation()}
@@ -4257,9 +4257,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   })}
                 </>
               )}
-              {/* Frame properties panel */}
+              {/* Frame properties panel (mobile only — desktop uses bottom bar) */}
               {selectedItem.type === "frame" && !locked && (
-                <div className="absolute pointer-events-auto flex items-center gap-1.5 px-2 py-1 rounded-xl shadow-lg border"
+                <div className="sm:hidden absolute pointer-events-auto flex items-center gap-1.5 px-2 py-1 rounded-xl shadow-lg border"
                   style={{ top: tl.y > 50 ? -44 : sh + 8, left:"50%", transform:"translateX(-50%)", background:"white",
                     borderColor:"var(--brown-pale)", whiteSpace:"nowrap", zIndex:35 }}
                   onMouseDown={e => e.stopPropagation()}>
@@ -5140,6 +5140,151 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
             style={{ color:"var(--brown-dark)" }}><ZoomIn size={14}/></button>
         </div>
       </div>
+
+      {/* Desktop bottom bar — shown when item is selected */}
+      {selectedItem && !touchDragging && (
+        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 border-t shrink-0 overflow-x-auto"
+          style={{ borderColor:"var(--brown-pale)", background:"white", minHeight:44 }}
+          onMouseDown={e => e.stopPropagation()}>
+          {/* Duplicate */}
+          <button
+            onClick={() => { const d=shiftItem({...selectedItem,id:uid()},24,24); itemsRef.current.push(d); send({type:"path",item:d}); pushHistory({type:"add",item:d}); render(); }}
+            className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80 flex items-center gap-1"
+            title="Дублировать"
+            style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+            ⧉ Дубль
+          </button>
+          {/* Crop — image only */}
+          {selectedItem.type === "image" && (
+            <button onClick={() => setCropId(selectedItem.id)}
+              className="rounded-lg px-2 py-1 text-xs font-medium border hover:opacity-80"
+              title="Обрезать"
+              style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+              ✂ Обрезать
+            </button>
+          )}
+          <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>
+          {/* Layer buttons */}
+          <button onClick={() => reorderItem(selectedItem.id, "forward")}
+            className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+            title="Вперёд" style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+            <ChevronUp size={14}/>
+          </button>
+          <button onClick={() => reorderItem(selectedItem.id, "backward")}
+            className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+            title="Назад" style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+            <ChevronDown size={14}/>
+          </button>
+          <button onClick={() => reorderItem(selectedItem.id, "front")}
+            className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+            title="На передний план" style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+            <ChevronsUp size={14}/>
+          </button>
+          <button onClick={() => reorderItem(selectedItem.id, "back")}
+            className="rounded-lg px-1.5 py-1 text-xs font-medium border hover:opacity-80 flex items-center justify-center"
+            title="На задний план" style={{ background:"white", borderColor:"var(--brown-pale)", color:"var(--brown-dark)", minHeight:28 }}>
+            <ChevronsDown size={14}/>
+          </button>
+          {/* Text colors */}
+          {selectedItem.type === "text" && !selectedItem.locked && (
+            <>
+              <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>
+              {(["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#ffffff"] as const).map(c => (
+                <button key={c}
+                  onClick={() => updateBoardItem({...selectedItem as TextItem, color: c})}
+                  className="w-5 h-5 rounded-full shrink-0 border-2"
+                  style={{ background: c, borderColor: (selectedItem as TextItem).color === c ? "#4a80f0" : "var(--brown-pale)" }}/>
+              ))}
+              <label className="relative w-5 h-5 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
+                title="Другой цвет" style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}>
+                <input type="color" value={(selectedItem as TextItem).color}
+                  onChange={e => updateBoardItem({...selectedItem as TextItem, color: e.target.value})}
+                  className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+              </label>
+            </>
+          )}
+          {/* Frame properties */}
+          {selectedItem.type === "frame" && !selectedItem.locked && (
+            <>
+              <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>
+              <label className="w-6 h-6 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
+                style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).color }} title="Цвет рамки">
+                <input type="color" value={(selectedItem as FrameItem).color}
+                  onChange={e => updateBoardItem({...selectedItem as FrameItem, color:e.target.value})}
+                  className="absolute opacity-0 w-full h-full cursor-pointer" style={{top:0,left:0}}/>
+              </label>
+              <label className="w-6 h-6 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
+                style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).bgColor }} title="Заливка">
+                <input type="color" value={(selectedItem as FrameItem).bgColor}
+                  onChange={e => updateBoardItem({...selectedItem as FrameItem, bgColor:e.target.value})}
+                  className="absolute opacity-0 w-full h-full cursor-pointer" style={{top:0,left:0}}/>
+              </label>
+              <div className="w-px h-4 shrink-0" style={{ background:"var(--brown-pale)" }}/>
+              <span className="text-xs shrink-0" style={{ color:"var(--brown-mid)" }}>Прозрачность</span>
+              <input type="range" min={10} max={100} step={5}
+                value={(selectedItem as FrameItem).opacity ?? 100}
+                onChange={e => updateBoardItem({...selectedItem as FrameItem, opacity:+e.target.value})}
+                className="w-20 h-1 accent-blue-400 shrink-0"/>
+              <span className="text-xs w-7 tabular-nums shrink-0" style={{ color:"var(--brown-mid)" }}>
+                {(selectedItem as FrameItem).opacity ?? 100}%
+              </span>
+              {(role === "tutor" || currentStudentId) && (() => {
+                const fi = selectedItem as FrameItem;
+                const isPrivate = !!fi.private;
+                return (
+                  <>
+                    <div className="w-px h-4 shrink-0" style={{ background:"var(--brown-pale)" }}/>
+                    <button
+                      onClick={() => {
+                        const next = isPrivate
+                          ? { ...fi, private: false, ownerStudentId: undefined }
+                          : { ...fi, private: true, ownerStudentId: currentStudentId ?? fi.ownerStudentId };
+                        updateBoardItem(next);
+                      }}
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg border font-medium shrink-0"
+                      style={{
+                        borderColor: isPrivate ? "#c07020" : "var(--brown-pale)",
+                        background:  isPrivate ? "#fff8e0" : "transparent",
+                        color:       isPrivate ? "#c07020" : "var(--brown-mid)",
+                      }}>
+                      {isPrivate ? "🔒 Личный" : "🔓 Общий"}
+                    </button>
+                    {isPrivate && role === "tutor" && students.length > 0 && (
+                      <select
+                        value={fi.ownerStudentId ?? ""}
+                        onChange={e => updateBoardItem({ ...fi, ownerStudentId: e.target.value || undefined })}
+                        onMouseDown={e => e.stopPropagation()}
+                        className="text-xs px-2 py-0.5 rounded-lg border outline-none shrink-0"
+                        style={{ borderColor: "#c07020", background: "#fff8e0", color: "#c07020", maxWidth: 120 }}>
+                        <option value="">— чей фрейм —</option>
+                        {students.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                );
+              })()}
+            </>
+          )}
+          <div className="flex-1"/>
+          {/* Delete */}
+          <button
+            onClick={() => {
+              const toRemove = new Set(selectedIds.size > 0 ? selectedIds : [selectedItem.id]);
+              pushHistory({ type:"clear", saved:[...itemsRef.current] });
+              itemsRef.current = itemsRef.current.filter(i => !toRemove.has(i.id));
+              render(); send({ type:"clear" });
+              itemsRef.current.forEach(item => send({ type:"path", item }));
+              setSelectedId(null);
+              setSelectedIds(new Set());
+            }}
+            className="rounded-lg px-3 py-1 text-xs font-medium text-white hover:opacity-80 flex items-center gap-1 shrink-0"
+            style={{ background:"#e05030", minHeight:28 }}>
+            <Trash2 size={12}/> Удалить
+          </button>
+        </div>
+      )}
 
       {/* Mobile toolbar */}
       <div className="flex sm:hidden flex-col border-t shrink-0" data-no-prevent style={{ borderColor:"var(--brown-pale)", background:"white" }}
