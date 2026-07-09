@@ -21,7 +21,7 @@ type Snapshot = {
 };
 
 export default function BoardView({
-  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup,
+  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents,
 }: {
   roomId: string;
   studentId?: string;
@@ -29,6 +29,7 @@ export default function BoardView({
   snapshots: Snapshot[];
   todayLessonId?: string;
   isGroup?: boolean;
+  groupStudents?: { id: string; name: string }[];
 }) {
   const canvasRef   = useRef<WhiteboardRef>(null);
   const canvasDivRef= useRef<HTMLDivElement>(null);
@@ -190,7 +191,7 @@ export default function BoardView({
           {/* Canvas area */}
           <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
             <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative" style={{ minHeight: "40vh" }}>
-              <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} />
+              <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} students={groupStudents} />
               {/* Fullscreen toggle */}
               <button
                 onClick={() => setFullscreen(v => !v)}

@@ -1011,8 +1011,8 @@ function parseFormula(input: string): ((x: number) => number) | null {
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string }>(
-function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId }, ref) {
+const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[] }>(
+function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [] }, ref) {
 
   const containerRef    = useRef<HTMLDivElement>(null);
   const canvasRef       = useRef<HTMLCanvasElement>(null);
@@ -4178,7 +4178,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
               {/* Frame properties panel */}
               {selectedItem.type === "frame" && !locked && (
                 <div className="absolute pointer-events-auto flex items-center gap-1.5 px-2 py-1 rounded-xl shadow-lg border"
-                  style={{ top:-44, left:"50%", transform:"translateX(-50%)", background:"white",
+                  style={{ top: tl.y > 50 ? -44 : sh + 8, left:"50%", transform:"translateX(-50%)", background:"white",
                     borderColor:"var(--brown-pale)", whiteSpace:"nowrap", zIndex:35 }}
                   onMouseDown={e => e.stopPropagation()}>
                   {/* Border color */}
@@ -4208,28 +4208,46 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                     {(selectedItem as FrameItem).opacity ?? 100}%
                   </span>
                   <div className="w-px h-4" style={{ background:"var(--brown-pale)" }}/>
-                  {/* Private frame toggle — visible to tutor (to assign) or student owner */}
+                  {/* Private frame toggle */}
                   {(role === "tutor" || currentStudentId) && (() => {
                     const fi = selectedItem as FrameItem;
                     const isPrivate = !!fi.private;
                     return (
-                      <button
-                        onClick={() => {
-                          const next = isPrivate
-                            ? { ...fi, private: false, ownerStudentId: undefined }
-                            : { ...fi, private: true, ownerStudentId: currentStudentId ?? fi.ownerStudentId };
-                          updateBoardItem(next);
-                        }}
-                        className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg border font-medium transition-all"
-                        style={{
-                          borderColor: isPrivate ? "#c07020" : "var(--brown-pale)",
-                          background:  isPrivate ? "#fff8e0" : "transparent",
-                          color:       isPrivate ? "#c07020" : "var(--brown-mid)",
-                        }}
-                        title={isPrivate ? "Фрейм приватный — нажмите, чтобы сделать общим" : "Сделать приватным — виден только владельцу"}
-                      >
-                        {isPrivate ? "🔒 Личный" : "🔓 Общий"}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => {
+                            const next = isPrivate
+                              ? { ...fi, private: false, ownerStudentId: undefined }
+                              : { ...fi, private: true, ownerStudentId: currentStudentId ?? fi.ownerStudentId };
+                            updateBoardItem(next);
+                          }}
+                          className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg border font-medium transition-all"
+                          style={{
+                            borderColor: isPrivate ? "#c07020" : "var(--brown-pale)",
+                            background:  isPrivate ? "#fff8e0" : "transparent",
+                            color:       isPrivate ? "#c07020" : "var(--brown-mid)",
+                          }}
+                          title={isPrivate ? "Фрейм приватный — нажмите, чтобы сделать общим" : "Сделать приватным — виден только владельцу"}
+                        >
+                          {isPrivate ? "🔒 Личный" : "🔓 Общий"}
+                        </button>
+                        {/* Student owner picker — tutor only, when frame is private and students list provided */}
+                        {isPrivate && role === "tutor" && students.length > 0 && (
+                          <select
+                            value={fi.ownerStudentId ?? ""}
+                            onChange={e => updateBoardItem({ ...fi, ownerStudentId: e.target.value || undefined })}
+                            onMouseDown={e => e.stopPropagation()}
+                            className="text-xs px-2 py-0.5 rounded-lg border outline-none"
+                            style={{ borderColor: "#c07020", background: "#fff8e0", color: "#c07020", maxWidth: 120 }}
+                            title="Чей фрейм — этот ученик видит его, остальные нет"
+                          >
+                            <option value="">— чей фрейм —</option>
+                            {students.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </>
                     );
                   })()}
                 </div>
