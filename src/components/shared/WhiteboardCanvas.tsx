@@ -3115,7 +3115,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [] }, ref) {
       {/* Vertical sidebar */}
       <aside className="hidden sm:flex flex-col items-center gap-1 py-2 border-r shrink-0 relative"
         data-no-prevent
-        style={{ width: 52, overflowX: "visible", overflowY: "auto", borderColor:"var(--brown-pale)", background:"white" }}>
+        style={{ width: 52, overflowX: "hidden", overflowY: "auto", borderColor:"var(--brown-pale)", background:"white" }}>
         <SideBtn active={tool==="select"} onClick={()=>pickTool("select")} title="Выбор [V]"><Pointer size={16}/></SideBtn>
         <SideBtn active={tool==="hand"} onClick={()=>pickTool("hand")} title="Рука [H]"><Hand size={16}/></SideBtn>
         <div className="w-8 h-px mx-auto my-1" style={{ background:"var(--brown-pale)" }}/>
