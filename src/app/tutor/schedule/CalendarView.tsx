@@ -13,8 +13,10 @@ type Lesson = {
   price_rub?: number | null;
   subscription_id?: string | null;
   students?: { name: string } | null;
+  groups?: { name: string } | null;
 };
-type Student     = { id: string; name: string; default_price_rub?: number | null };
+type Student      = { id: string; name: string; default_price_rub?: number | null };
+type Group        = { id: string; name: string };
 type Subscription = { id: string; student_id: string; balance: number; name: string };
 
 const STATUS_BG: Record<string, string> = {
@@ -57,11 +59,12 @@ function pluralLessons(n: number) {
 }
 
 export default function CalendarView({
-  lessons, students, subscriptions,
+  lessons, students, subscriptions, groups = [],
 }: {
   lessons: Lesson[];
   students: Student[];
   subscriptions: Subscription[];
+  groups?: Group[];
 }) {
   const today = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
@@ -69,7 +72,9 @@ export default function CalendarView({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // form
+  const [mode,        setMode]        = useState<"student" | "group">("student");
   const [studentId,   setStudentId]   = useState("");
+  const [groupId,     setGroupId]     = useState("");
   const [time,        setTime]        = useState("");
   const [duration,    setDuration]    = useState("60");
   const [price,       setPrice]       = useState("");
@@ -91,7 +96,7 @@ export default function CalendarView({
   const { daysInMonth, firstDow } = useMemo(() => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const raw = new Date(year, month, 1).getDay();
-    const firstDow = raw === 0 ? 6 : raw - 1; // Mon=0
+    const firstDow = raw === 0 ? 6 : raw - 1;
     return { daysInMonth, firstDow };
   }, [year, month]);
 
@@ -122,35 +127,68 @@ export default function CalendarView({
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!studentId || !selectedDate || !time) { setError("Выберите ученика и время"); return; }
+    if (!selectedDate || !time) { setError("Укажите время"); return; }
+    if (mode === "student" && !studentId) { setError("Выберите ученика"); return; }
+    if (mode === "group" && !groupId)     { setError("Выберите группу"); return; }
+
     setLoading(true); setError(null);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Не авторизован"); setLoading(false); return; }
 
     const weeks = repeat ? Math.max(1, Math.min(12, parseInt(repeatWeeks) || 1)) : 1;
-    const rows = Array.from({ length: weeks }, (_, i) => {
-      const d = new Date(`${selectedDate}T${time}:00`);
-      d.setDate(d.getDate() + i * 7);
-      return {
-        tutor_id:        user.id,
-        student_id:      studentId,
-        scheduled_at:    d.toISOString(),
-        duration_min:    parseInt(duration) || 60,
-        price_rub:       price ? parseInt(price) : null,
-        subscription_id: activeSub?.id ?? null,
-      };
-    });
 
-    const { error: err } = await supabase.from("lessons").insert(rows);
-    setLoading(false);
-    if (err) { setError(err.message); return; }
+    if (mode === "group") {
+      const { data: members, error: membErr } = await supabase
+        .from("group_members")
+        .select("student_id")
+        .eq("group_id", groupId);
+
+      if (membErr || !members?.length) {
+        setError(membErr?.message ?? "В группе нет учеников"); setLoading(false); return;
+      }
+
+      const rows = Array.from({ length: weeks }, (_, i) => {
+        const d = new Date(`${selectedDate}T${time}:00`);
+        d.setDate(d.getDate() + i * 7);
+        return members.map(m => ({
+          tutor_id:     user.id,
+          student_id:   m.student_id,
+          group_id:     groupId,
+          scheduled_at: d.toISOString(),
+          duration_min: parseInt(duration) || 60,
+          price_rub:    price ? parseInt(price) : null,
+        }));
+      }).flat();
+
+      const { error: err } = await supabase.from("lessons").insert(rows);
+      setLoading(false);
+      if (err) { setError(err.message); return; }
+    } else {
+      const rows = Array.from({ length: weeks }, (_, i) => {
+        const d = new Date(`${selectedDate}T${time}:00`);
+        d.setDate(d.getDate() + i * 7);
+        return {
+          tutor_id:        user.id,
+          student_id:      studentId,
+          scheduled_at:    d.toISOString(),
+          duration_min:    parseInt(duration) || 60,
+          price_rub:       price ? parseInt(price) : null,
+          subscription_id: activeSub?.id ?? null,
+        };
+      });
+
+      const { error: err } = await supabase.from("lessons").insert(rows);
+      setLoading(false);
+      if (err) { setError(err.message); return; }
+    }
+
     setSelectedDate(null);
-    setStudentId(""); setTime(""); setPrice(""); setRepeat(false); setRepeatWeeks("4");
+    setStudentId(""); setGroupId(""); setTime(""); setPrice(""); setRepeat(false); setRepeatWeeks("4");
     router.refresh();
   }
 
-  const todayKey  = toDateKey(today.toISOString());
+  const todayKey   = toDateKey(today.toISOString());
   const inputStyle = { borderColor: "var(--brown-pale)", background: "#fdf8f0", color: "var(--brown-dark)" };
 
   const cells: (number | null)[] = [
@@ -161,6 +199,18 @@ export default function CalendarView({
   const selectedLabel = selectedDate
     ? new Date(selectedDate + "T12:00:00").toLocaleDateString("ru", { weekday: "long", day: "numeric", month: "long" })
     : "";
+
+  const modeBtn = (m: "student" | "group", label: string) => (
+    <button type="button" onClick={() => setMode(m)}
+      className="px-3 py-1 rounded-lg text-sm font-medium transition-all"
+      style={{
+        background: mode === m ? "var(--gradient-primary)" : "transparent",
+        color: mode === m ? "white" : "var(--brown-mid)",
+        border: mode === m ? "none" : "1px solid var(--brown-pale)",
+      }}>
+      {label}
+    </button>
+  );
 
   return (
     <div>
@@ -187,11 +237,23 @@ export default function CalendarView({
       <div className="grid grid-cols-7 gap-1">
         {cells.map((day, i) => {
           if (!day) return <div key={`e${i}`}/>;
-          const key       = `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+          const key        = `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
           const dayLessons = lessonsByDate[key] ?? [];
-          const isToday   = key === todayKey;
+          const isToday    = key === todayKey;
           const isSelected = key === selectedDate;
-          const isPast    = key < todayKey;
+          const isPast     = key < todayKey;
+
+          // deduplicate group lessons for display (show group once per timeslot)
+          const displayed: Lesson[] = [];
+          const seenGroups = new Set<string>();
+          for (const l of dayLessons) {
+            if (l.groups?.name) {
+              const gKey = `${l.groups.name}-${l.scheduled_at}`;
+              if (seenGroups.has(gKey)) continue;
+              seenGroups.add(gKey);
+            }
+            displayed.push(l);
+          }
 
           return (
             <button key={key} onClick={() => selectDay(key)}
@@ -206,18 +268,18 @@ export default function CalendarView({
                 {day}
               </span>
               <div className="flex flex-col gap-0.5 w-full overflow-hidden">
-                {dayLessons.slice(0, 2).map(l => (
+                {displayed.slice(0, 2).map(l => (
                   <div key={l.id} className="text-xs rounded px-1 py-0.5 leading-tight truncate"
                     style={{ background: STATUS_BG[l.status] ?? "#f1f5f9", color: STATUS_TEXT[l.status] ?? "#64748b" }}>
-                    {l.students ? initials(l.students.name) : "?"}
+                    {l.groups?.name ? `👥 ${initials(l.groups.name)}` : (l.students ? initials(l.students.name) : "?")}
                     <span className="hidden sm:inline ml-0.5">
                       {new Date(l.scheduled_at).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}
                     </span>
                   </div>
                 ))}
-                {dayLessons.length > 2 && (
+                {displayed.length > 2 && (
                   <span className="text-xs leading-none" style={{ color: "var(--brown-light)" }}>
-                    +{dayLessons.length - 2}
+                    +{displayed.length - 2}
                   </span>
                 )}
               </div>
@@ -241,11 +303,27 @@ export default function CalendarView({
           </div>
 
           <form onSubmit={handleSubmit} className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <select value={studentId} onChange={e => handleStudentChange(e.target.value)} required
-              className="col-span-2 px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}>
-              <option value="">Ученик *</option>
-              {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            {/* Переключатель ученик / группа */}
+            {groups.length > 0 && (
+              <div className="col-span-2 sm:col-span-4 flex gap-2">
+                {modeBtn("student", "Ученик")}
+                {modeBtn("group", "👥 Группа")}
+              </div>
+            )}
+
+            {mode === "student" ? (
+              <select value={studentId} onChange={e => handleStudentChange(e.target.value)}
+                className="col-span-2 px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}>
+                <option value="">Ученик *</option>
+                {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            ) : (
+              <select value={groupId} onChange={e => setGroupId(e.target.value)}
+                className="col-span-2 px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}>
+                <option value="">Группа *</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            )}
 
             <input type="time" value={time} onChange={e => setTime(e.target.value)} required
               className="px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
@@ -263,7 +341,7 @@ export default function CalendarView({
               placeholder="Цена, ₽" min="0" step="50"
               className="col-span-2 px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
 
-            {activeSub && (
+            {activeSub && mode === "student" && (
               <p className="col-span-2 sm:col-span-4 text-xs px-3 py-1.5 rounded-lg"
                 style={{ background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0" }}>
                 Абонемент «{activeSub.name}» · остаток {activeSub.balance.toLocaleString("ru")} ₽ — спишется автоматически

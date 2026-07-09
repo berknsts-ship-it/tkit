@@ -62,6 +62,7 @@ export default async function SchedulePage({
             lessons={all}
             students={students ?? []}
             subscriptions={subscriptions ?? []}
+            groups={groups ?? []}
           />
         </div>
       ) : (
