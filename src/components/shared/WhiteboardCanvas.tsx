@@ -2808,6 +2808,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [tableCols, setTableCols] = useState(3);
   const [showTablePicker, setShowTablePicker] = useState(false);
 
+  const [openPicker, setOpenPicker] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
   // ── dice ─────────────────────────────────────────────────────────────────────
   const rollDice = () => {
     setDiceRolling(true);
@@ -3217,6 +3220,24 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!openPicker) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setOpenPicker(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenPicker(null);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [openPicker]);
 
   return (
     <div className="flex flex-1 overflow-hidden select-none" style={{ touchAction: "none" }}>
@@ -5195,30 +5216,114 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   className="w-5 h-5 rounded-full shrink-0 border-2"
                   style={{ background: c, borderColor: (selectedItem as TextItem).color === c ? "#4a80f0" : "var(--brown-pale)" }}/>
               ))}
-              <label className="relative w-5 h-5 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
-                title="Другой цвет" style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}>
-                <input type="color" value={(selectedItem as TextItem).color}
-                  onChange={e => updateBoardItem({...selectedItem as TextItem, color: e.target.value})}
-                  className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
-              </label>
+              {/* Custom text color popup */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setOpenPicker(p => p === "textCustom" ? null : "textCustom")}
+                  className="w-5 h-5 rounded-full border-2"
+                  title="Другой цвет"
+                  style={{ background:(selectedItem as TextItem).color,
+                    borderColor: !["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#ffffff"].includes((selectedItem as TextItem).color) ? "#4a80f0" : "var(--brown-pale)" }}/>
+                {openPicker === "textCustom" && (
+                  <div ref={pickerRef}
+                    className="absolute bottom-full mb-2 left-0 z-50 p-3 rounded-xl border shadow-xl"
+                    style={{ background:"white", borderColor:"var(--brown-pale)", minWidth:164 }}
+                    onMouseDown={e => e.stopPropagation()}>
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {(["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#9040c0","#20a0a0","#ffffff","#888888"] as const).map(c => (
+                        <button key={c}
+                          onClick={() => { updateBoardItem({...selectedItem as TextItem, color: c}); setOpenPicker(null); }}
+                          className="w-6 h-6 rounded-full border-2 transition-all hover:scale-110"
+                          style={{ background:c, borderColor:(selectedItem as TextItem).color===c?"#4a80f0":"transparent",
+                            boxShadow: c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
+                        style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}>
+                        <input type="color" value={(selectedItem as TextItem).color}
+                          onChange={e => updateBoardItem({...selectedItem as TextItem, color: e.target.value})}
+                          className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                      </div>
+                      <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
+                    </label>
+                  </div>
+                )}
+              </div>
             </>
           )}
           {/* Frame properties */}
           {selectedItem.type === "frame" && !selectedItem.locked && (
             <>
               <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>
-              <label className="w-6 h-6 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
-                style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).color }} title="Цвет рамки">
-                <input type="color" value={(selectedItem as FrameItem).color}
-                  onChange={e => updateBoardItem({...selectedItem as FrameItem, color:e.target.value})}
-                  className="absolute opacity-0 w-full h-full cursor-pointer" style={{top:0,left:0}}/>
-              </label>
-              <label className="w-6 h-6 rounded-full border-2 cursor-pointer overflow-hidden shrink-0"
-                style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).bgColor }} title="Заливка">
-                <input type="color" value={(selectedItem as FrameItem).bgColor}
-                  onChange={e => updateBoardItem({...selectedItem as FrameItem, bgColor:e.target.value})}
-                  className="absolute opacity-0 w-full h-full cursor-pointer" style={{top:0,left:0}}/>
-              </label>
+              {/* Frame border color popup */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setOpenPicker(p => p === "frameBorder" ? null : "frameBorder")}
+                  className="w-6 h-6 rounded-full border-2"
+                  title="Цвет рамки"
+                  style={{ background:(selectedItem as FrameItem).color,
+                    borderColor: openPicker === "frameBorder" ? "#4a80f0" : "var(--brown-pale)" }}/>
+                {openPicker === "frameBorder" && (
+                  <div ref={pickerRef}
+                    className="absolute bottom-full mb-2 left-0 z-50 p-3 rounded-xl border shadow-xl"
+                    style={{ background:"white", borderColor:"var(--brown-pale)", minWidth:164 }}
+                    onMouseDown={e => e.stopPropagation()}>
+                    <p className="text-xs mb-2 font-medium" style={{ color:"var(--brown-mid)" }}>Цвет рамки</p>
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {FRAME_COLORS.map(c => (
+                        <button key={c}
+                          onClick={() => { updateBoardItem({...selectedItem as FrameItem, color:c}); setOpenPicker(null); }}
+                          className="w-6 h-6 rounded-full border-2 transition-all hover:scale-110"
+                          style={{ background:c, borderColor:(selectedItem as FrameItem).color===c?"#4a80f0":"transparent" }}/>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
+                        style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).color }}>
+                        <input type="color" value={(selectedItem as FrameItem).color}
+                          onChange={e => updateBoardItem({...selectedItem as FrameItem, color:e.target.value})}
+                          className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                      </div>
+                      <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+              {/* Frame fill color popup */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setOpenPicker(p => p === "frameFill" ? null : "frameFill")}
+                  className="w-6 h-6 rounded-lg border-2"
+                  title="Заливка"
+                  style={{ background:(selectedItem as FrameItem).bgColor,
+                    borderColor: openPicker === "frameFill" ? "#4a80f0" : "var(--brown-pale)" }}/>
+                {openPicker === "frameFill" && (
+                  <div ref={pickerRef}
+                    className="absolute bottom-full mb-2 left-0 z-50 p-3 rounded-xl border shadow-xl"
+                    style={{ background:"white", borderColor:"var(--brown-pale)", minWidth:164 }}
+                    onMouseDown={e => e.stopPropagation()}>
+                    <p className="text-xs mb-2 font-medium" style={{ color:"var(--brown-mid)" }}>Заливка</p>
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {["#ffffff","#f5f0e8","#e8f0ff","#e8ffe8","#fff8e0","#ffe8e8","#f0e8ff","#e8f8ff"].map(c => (
+                        <button key={c}
+                          onClick={() => { updateBoardItem({...selectedItem as FrameItem, bgColor:c}); setOpenPicker(null); }}
+                          className="w-6 h-6 rounded-md border-2 transition-all hover:scale-110"
+                          style={{ background:c, borderColor:(selectedItem as FrameItem).bgColor===c?"#4a80f0":"#e0d8d0" }}/>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
+                        style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).bgColor }}>
+                        <input type="color" value={(selectedItem as FrameItem).bgColor}
+                          onChange={e => updateBoardItem({...selectedItem as FrameItem, bgColor:e.target.value})}
+                          className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                      </div>
+                      <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
+                    </label>
+                  </div>
+                )}
+              </div>
               <div className="w-px h-4 shrink-0" style={{ background:"var(--brown-pale)" }}/>
               <span className="text-xs shrink-0" style={{ color:"var(--brown-mid)" }}>Прозрачность</span>
               <input type="range" min={10} max={100} step={5}
