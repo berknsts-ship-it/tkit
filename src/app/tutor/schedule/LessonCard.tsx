@@ -31,6 +31,7 @@ interface Lesson {
   duration_min?: number;
   notes?: string | null;
   students?: { name: string } | null;
+  groups?: { name: string } | null;
   payment_status?: PayStatus;
   price_rub?: number | null;
 }
@@ -142,8 +143,14 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
 
         {/* Инфо */}
         <div className="flex-1 min-w-0">
-          <div className="font-medium" style={{ color: "var(--brown-dark)" }}>
+          <div className="font-medium flex items-center gap-1.5 flex-wrap" style={{ color: "var(--brown-dark)" }}>
             {lesson.students?.name ?? "Ученик"}
+            {lesson.groups?.name && (
+              <span className="text-xs px-1.5 py-0.5 rounded-md font-medium"
+                style={{ background: "#eef4ff", color: "#2060d0", border: "1px solid #c8d8f8" }}>
+                👥 {lesson.groups.name}
+              </span>
+            )}
           </div>
           <div className="text-sm" style={{ color: "var(--brown-mid)" }}>
             {dt.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}

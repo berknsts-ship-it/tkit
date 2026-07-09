@@ -21,12 +21,13 @@ export default async function SchedulePage({
   const tutorId = await getEffectiveTutorId(user);
   const db = createAdminClient();
 
-  const [{ data: lessons }, { data: students }, { data: subscriptions }] = await Promise.all([
-    db.from("lessons").select("*, students(name)")
+  const [{ data: lessons }, { data: students }, { data: subscriptions }, { data: groups }] = await Promise.all([
+    db.from("lessons").select("*, students(name), groups(name)")
       .eq("tutor_id", tutorId)
       .order("scheduled_at"),
     db.from("students").select("id, name, default_price_rub").eq("tutor_id", tutorId).order("name"),
     db.from("subscriptions").select("id, student_id, balance, name").eq("tutor_id", tutorId).eq("status", "active"),
+    db.from("groups").select("id, name").eq("tutor_id", tutorId).order("name"),
   ]);
 
   const all      = lessons ?? [];
@@ -68,7 +69,7 @@ export default async function SchedulePage({
         <>
           <div className="rounded-2xl border p-5 mb-6" style={card}>
             <h2 className="font-semibold mb-4" style={{ color: "var(--brown-dark)" }}>Добавить занятие</h2>
-            <NewLessonForm students={students ?? []} subscriptions={subscriptions ?? []} />
+            <NewLessonForm students={students ?? []} subscriptions={subscriptions ?? []} groups={groups ?? []} />
           </div>
 
           <h2 className="font-semibold mb-3" style={{ color: "var(--brown-dark)" }}>Предстоящие</h2>
