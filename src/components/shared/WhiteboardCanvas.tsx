@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
-import { flushSync } from "react-dom";
+import { flushSync, createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { saveBoardState, loadBoardState } from "@/app/actions/board";
 import {
@@ -1041,8 +1041,8 @@ function parseFormula(input: string): ((x: number) => number) | null {
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[] }>(
-function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [] }, ref) {
+const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean }>(
+function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false }, ref) {
 
   const containerRef    = useRef<HTMLDivElement>(null);
   const canvasRef       = useRef<HTMLCanvasElement>(null);
@@ -1138,6 +1138,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   // image crop
   const [cropId, setCropId] = useState<string | null>(null);
   const cropRef = useRef<{ ox: number; oy: number; ow: number; oh: number; sx: number; sy: number; ex: number; ey: number } | null>(null);
+  const cropDragRef = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
 
   // text
   const [textInput,  setTextInput]  = useState<{ wx: number; wy: number } | null>(null);
@@ -1247,6 +1248,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const shapeMenuAnchorRef  = useRef<HTMLDivElement>(null);
   const frameMenuAnchorRef  = useRef<HTMLDivElement>(null);
   const moreToolsAnchorRef  = useRef<HTMLDivElement>(null);
+  const sideMenuRef = useRef<HTMLDivElement | null>(null);
   const [shapeMenuPos,  setShapeMenuPos]  = useState<{ top: number; left: number } | null>(null);
   const [frameMenuPos,  setFrameMenuPos]  = useState<{ top: number; left: number } | null>(null);
   const [moreToolsPos,  setMoreToolsPos]  = useState<{ top?: number; bottom?: number; left: number } | null>(null);
@@ -2809,6 +2811,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [showTablePicker, setShowTablePicker] = useState(false);
 
   const [openPicker, setOpenPicker] = useState<string | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ x: number; y: number } | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   // ── dice ─────────────────────────────────────────────────────────────────────
@@ -3204,7 +3207,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // e.code — физическая клавиша, работает при любой раскладке (рус/англ)
       switch (e.code) {
-        case "Escape": setPendingSymbol(null); setPendingSymbolPos(null); break;
+        case "Escape": setPendingSymbol(null); setPendingSymbolPos(null); setShowEmojiPicker(false); setShowVocabPanel(false); break;
         case "KeyV": setTool("select"); closeSidePanels(); break;
         case "KeyH": setTool("hand");   closeSidePanels(); break;
         case "KeyP": setTool("pen");    closeSidePanels(); break;
@@ -3221,9 +3224,16 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => () => {
+    if (cropDragRef.current) {
+      window.removeEventListener("mousemove", cropDragRef.current.move);
+      window.removeEventListener("mouseup", cropDragRef.current.up);
+    }
+  }, []);
+
   useEffect(() => {
     if (!openPicker) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
         setOpenPicker(null);
       }
@@ -3231,13 +3241,41 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpenPicker(null);
     };
-    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("keydown", onKey, true);
     return () => {
-      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("pointerdown", onDown, true);
       document.removeEventListener("keydown", onKey, true);
     };
   }, [openPicker]);
+
+  useEffect(() => {
+    setOpenPicker(null);
+    setPickerPos(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  useEffect(() => {
+    setShowShapeMenu(false); setShowFrameMenu(false); setShowMoreTools(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreen]);
+
+  useEffect(() => {
+    if (!showShapeMenu && !showFrameMenu && !showMoreTools) return;
+    const closeAll = () => { setShowShapeMenu(false); setShowFrameMenu(false); setShowMoreTools(false); };
+    const onDown = (e: PointerEvent) => {
+      if (sideMenuRef.current && !sideMenuRef.current.contains(e.target as Node)) closeAll();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeAll();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [showShapeMenu, showFrameMenu, showMoreTools]);
 
   return (
     <div className="flex flex-1 overflow-hidden select-none" style={{ touchAction: "none" }}>
@@ -3265,7 +3303,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
             <Shapes size={16}/>
           </SideBtn>
           {showShapeMenu && shapeMenuPos && (
-            <div className="fixed z-[10000] rounded-xl border shadow-lg flex flex-col"
+            <div ref={sideMenuRef} className="fixed z-[10000] rounded-xl border shadow-lg flex flex-col"
               style={{ background:"white", borderColor:"var(--brown-pale)", width:220, maxHeight:360, top: shapeMenuPos.top, left: shapeMenuPos.left }}
               onMouseDown={e => e.stopPropagation()}>
               <div className="overflow-y-auto flex-1 p-1.5">
@@ -3297,7 +3335,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
             <LayoutTemplate size={16}/>
           </SideBtn>
           {showFrameMenu && frameMenuPos && (
-            <div className="fixed z-[10000] rounded-xl border shadow-lg p-1.5 w-52"
+            <div ref={sideMenuRef} className="fixed z-[10000] rounded-xl border shadow-lg p-1.5 w-52"
               style={{ background:"white", borderColor:"var(--brown-pale)", top: frameMenuPos.top, left: frameMenuPos.left }}>
               {FRAME_SHAPES.map(k => (
                 <button key={k.v} onClick={()=>{setFrameShape(k.v);setShowFrameMenu(false);setTool("frame");}}
@@ -3333,7 +3371,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
             <span className="text-lg font-bold leading-none">+</span>
           </SideBtn>
           {showMoreTools && moreToolsPos && (
-            <div className="fixed z-[10000] rounded-2xl border shadow-xl overflow-hidden"
+            <div ref={sideMenuRef} className="fixed z-[10000] rounded-2xl border shadow-xl overflow-hidden"
               onTouchStart={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
               style={{ background:"white", borderColor:"var(--brown-pale)", width:260, top: moreToolsPos.top, bottom: moreToolsPos.bottom, left: moreToolsPos.left }}>
               <div className="px-3 py-2 text-xs font-medium border-b" style={{ color:"var(--brown-mid)", borderColor:"var(--brown-pale)" }}>Ещё инструменты</div>
@@ -4619,7 +4657,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                         if(hy===1) c2.ey=Math.min(1,Math.max(orig.ey+dy,c2.sy+0.05));
                         setPanVer(v=>v+1);
                       };
-                      const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+                      const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);cropDragRef.current=null;};
+                      cropDragRef.current={move:onMove,up:onUp};
                       window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
                     }}/>
                 ))}
@@ -5216,114 +5255,33 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   className="w-5 h-5 rounded-full shrink-0 border-2"
                   style={{ background: c, borderColor: (selectedItem as TextItem).color === c ? "#4a80f0" : "var(--brown-pale)" }}/>
               ))}
-              {/* Custom text color popup */}
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => setOpenPicker(p => p === "textCustom" ? null : "textCustom")}
-                  className="w-5 h-5 rounded-full border-2"
-                  title="Другой цвет"
-                  style={{ background:(selectedItem as TextItem).color,
-                    borderColor: !["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#ffffff"].includes((selectedItem as TextItem).color) ? "#4a80f0" : "var(--brown-pale)" }}/>
-                {openPicker === "textCustom" && (
-                  <div ref={pickerRef}
-                    className="absolute bottom-full mb-2 left-0 z-50 p-3 rounded-xl border shadow-xl"
-                    style={{ background:"white", borderColor:"var(--brown-pale)", minWidth:164 }}
-                    onMouseDown={e => e.stopPropagation()}>
-                    <div className="flex gap-1.5 flex-wrap mb-2">
-                      {(["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#9040c0","#20a0a0","#ffffff","#888888"] as const).map(c => (
-                        <button key={c}
-                          onClick={() => { updateBoardItem({...selectedItem as TextItem, color: c}); setOpenPicker(null); }}
-                          className="w-6 h-6 rounded-full border-2 transition-all hover:scale-110"
-                          style={{ background:c, borderColor:(selectedItem as TextItem).color===c?"#4a80f0":"transparent",
-                            boxShadow: c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>
-                      ))}
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
-                        style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}>
-                        <input type="color" value={(selectedItem as TextItem).color}
-                          onChange={e => updateBoardItem({...selectedItem as TextItem, color: e.target.value})}
-                          className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
-                      </div>
-                      <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
-                    </label>
-                  </div>
-                )}
-              </div>
+              {/* Custom text color popup trigger */}
+              <button
+                onClick={e => { const r=(e.currentTarget as HTMLButtonElement).getBoundingClientRect(); setPickerPos({x:r.left,y:r.top}); setOpenPicker(p => p==="textCustom"?null:"textCustom"); }}
+                className="w-5 h-5 rounded-full border-2 shrink-0"
+                title="Другой цвет"
+                style={{ background:(selectedItem as TextItem).color,
+                  borderColor: !["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#ffffff"].includes((selectedItem as TextItem).color) ? "#4a80f0" : "var(--brown-pale)" }}/>
             </>
           )}
           {/* Frame properties */}
           {selectedItem.type === "frame" && !selectedItem.locked && (
             <>
               <div className="w-px h-5 shrink-0" style={{ background:"var(--brown-pale)" }}/>
-              {/* Frame border color popup */}
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => setOpenPicker(p => p === "frameBorder" ? null : "frameBorder")}
-                  className="w-6 h-6 rounded-full border-2"
-                  title="Цвет рамки"
-                  style={{ background:(selectedItem as FrameItem).color,
-                    borderColor: openPicker === "frameBorder" ? "#4a80f0" : "var(--brown-pale)" }}/>
-                {openPicker === "frameBorder" && (
-                  <div ref={pickerRef}
-                    className="absolute bottom-full mb-2 left-0 z-50 p-3 rounded-xl border shadow-xl"
-                    style={{ background:"white", borderColor:"var(--brown-pale)", minWidth:164 }}
-                    onMouseDown={e => e.stopPropagation()}>
-                    <p className="text-xs mb-2 font-medium" style={{ color:"var(--brown-mid)" }}>Цвет рамки</p>
-                    <div className="flex gap-1.5 flex-wrap mb-2">
-                      {FRAME_COLORS.map(c => (
-                        <button key={c}
-                          onClick={() => { updateBoardItem({...selectedItem as FrameItem, color:c}); setOpenPicker(null); }}
-                          className="w-6 h-6 rounded-full border-2 transition-all hover:scale-110"
-                          style={{ background:c, borderColor:(selectedItem as FrameItem).color===c?"#4a80f0":"transparent" }}/>
-                      ))}
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
-                        style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).color }}>
-                        <input type="color" value={(selectedItem as FrameItem).color}
-                          onChange={e => updateBoardItem({...selectedItem as FrameItem, color:e.target.value})}
-                          className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
-                      </div>
-                      <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
-                    </label>
-                  </div>
-                )}
-              </div>
-              {/* Frame fill color popup */}
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => setOpenPicker(p => p === "frameFill" ? null : "frameFill")}
-                  className="w-6 h-6 rounded-lg border-2"
-                  title="Заливка"
-                  style={{ background:(selectedItem as FrameItem).bgColor,
-                    borderColor: openPicker === "frameFill" ? "#4a80f0" : "var(--brown-pale)" }}/>
-                {openPicker === "frameFill" && (
-                  <div ref={pickerRef}
-                    className="absolute bottom-full mb-2 left-0 z-50 p-3 rounded-xl border shadow-xl"
-                    style={{ background:"white", borderColor:"var(--brown-pale)", minWidth:164 }}
-                    onMouseDown={e => e.stopPropagation()}>
-                    <p className="text-xs mb-2 font-medium" style={{ color:"var(--brown-mid)" }}>Заливка</p>
-                    <div className="flex gap-1.5 flex-wrap mb-2">
-                      {["#ffffff","#f5f0e8","#e8f0ff","#e8ffe8","#fff8e0","#ffe8e8","#f0e8ff","#e8f8ff"].map(c => (
-                        <button key={c}
-                          onClick={() => { updateBoardItem({...selectedItem as FrameItem, bgColor:c}); setOpenPicker(null); }}
-                          className="w-6 h-6 rounded-md border-2 transition-all hover:scale-110"
-                          style={{ background:c, borderColor:(selectedItem as FrameItem).bgColor===c?"#4a80f0":"#e0d8d0" }}/>
-                      ))}
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
-                        style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).bgColor }}>
-                        <input type="color" value={(selectedItem as FrameItem).bgColor}
-                          onChange={e => updateBoardItem({...selectedItem as FrameItem, bgColor:e.target.value})}
-                          className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
-                      </div>
-                      <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
-                    </label>
-                  </div>
-                )}
-              </div>
+              {/* Frame border color popup trigger */}
+              <button
+                onClick={e => { const r=(e.currentTarget as HTMLButtonElement).getBoundingClientRect(); setPickerPos({x:r.left,y:r.top}); setOpenPicker(p => p==="frameBorder"?null:"frameBorder"); }}
+                className="w-6 h-6 rounded-full border-2 shrink-0"
+                title="Цвет рамки"
+                style={{ background:(selectedItem as FrameItem).color,
+                  borderColor: openPicker==="frameBorder" ? "#4a80f0" : "var(--brown-pale)" }}/>
+              {/* Frame fill color popup trigger */}
+              <button
+                onClick={e => { const r=(e.currentTarget as HTMLButtonElement).getBoundingClientRect(); setPickerPos({x:r.left,y:r.top}); setOpenPicker(p => p==="frameFill"?null:"frameFill"); }}
+                className="w-6 h-6 rounded-lg border-2 shrink-0"
+                title="Заливка"
+                style={{ background:(selectedItem as FrameItem).bgColor,
+                  borderColor: openPicker==="frameFill" ? "#4a80f0" : "var(--brown-pale)" }}/>
               <div className="w-px h-4 shrink-0" style={{ background:"var(--brown-pale)" }}/>
               <span className="text-xs shrink-0" style={{ color:"var(--brown-mid)" }}>Прозрачность</span>
               <input type="range" min={10} max={100} step={5}
@@ -5389,6 +5347,90 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
             <Trash2 size={12}/> Удалить
           </button>
         </div>
+      )}
+
+      {/* Color picker portal — renders in document.body to escape overflow-hidden/overflow-x-auto ancestors */}
+      {openPicker && pickerPos && createPortal(
+        <div ref={pickerRef}
+          className="p-3 rounded-xl border shadow-xl"
+          style={{
+            position: "fixed",
+            left: pickerPos.x,
+            bottom: window.innerHeight - pickerPos.y + 8,
+            zIndex: 9999,
+            background: "white",
+            borderColor: "var(--brown-pale)",
+            minWidth: 164,
+          }}
+          onMouseDown={e => e.stopPropagation()}>
+          {openPicker === "textCustom" && selectedItem?.type === "text" && (
+            <>
+              <div className="flex gap-1.5 flex-wrap mb-2">
+                {(["#1a1a1a","#e05030","#4a80f0","#2a9d5c","#e0a020","#9b59b6","#9040c0","#20a0a0","#ffffff","#888888"] as const).map(c => (
+                  <button key={c}
+                    onClick={() => { updateBoardItem({...selectedItem as TextItem, color: c}); setOpenPicker(null); }}
+                    className="w-6 h-6 rounded-full border-2 transition-all hover:scale-110"
+                    style={{ background:c, borderColor:(selectedItem as TextItem).color===c?"#4a80f0":"transparent",
+                      boxShadow: c==="#ffffff"?"inset 0 0 0 1px #bbb":undefined }}/>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
+                  style={{ borderColor:"var(--brown-pale)", background:(selectedItem as TextItem).color }}>
+                  <input type="color" value={(selectedItem as TextItem).color}
+                    onChange={e => updateBoardItem({...selectedItem as TextItem, color: e.target.value})}
+                    className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                </div>
+                <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
+              </label>
+            </>
+          )}
+          {openPicker === "frameBorder" && selectedItem?.type === "frame" && (
+            <>
+              <p className="text-xs mb-2 font-medium" style={{ color:"var(--brown-mid)" }}>Цвет рамки</p>
+              <div className="flex gap-1.5 flex-wrap mb-2">
+                {FRAME_COLORS.map(c => (
+                  <button key={c}
+                    onClick={() => { updateBoardItem({...selectedItem as FrameItem, color:c}); setOpenPicker(null); }}
+                    className="w-6 h-6 rounded-full border-2 transition-all hover:scale-110"
+                    style={{ background:c, borderColor:(selectedItem as FrameItem).color===c?"#4a80f0":"transparent" }}/>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
+                  style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).color }}>
+                  <input type="color" value={(selectedItem as FrameItem).color}
+                    onChange={e => updateBoardItem({...selectedItem as FrameItem, color:e.target.value})}
+                    className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                </div>
+                <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
+              </label>
+            </>
+          )}
+          {openPicker === "frameFill" && selectedItem?.type === "frame" && (
+            <>
+              <p className="text-xs mb-2 font-medium" style={{ color:"var(--brown-mid)" }}>Заливка</p>
+              <div className="flex gap-1.5 flex-wrap mb-2">
+                {["#ffffff","#f5f0e8","#e8f0ff","#e8ffe8","#fff8e0","#ffe8e8","#f0e8ff","#e8f8ff"].map(c => (
+                  <button key={c}
+                    onClick={() => { updateBoardItem({...selectedItem as FrameItem, bgColor:c}); setOpenPicker(null); }}
+                    className="w-6 h-6 rounded-md border-2 transition-all hover:scale-110"
+                    style={{ background:c, borderColor:(selectedItem as FrameItem).bgColor===c?"#4a80f0":"#e0d8d0" }}/>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className="w-7 h-7 rounded-lg border-2 relative overflow-hidden shrink-0"
+                  style={{ borderColor:"var(--brown-pale)", background:(selectedItem as FrameItem).bgColor }}>
+                  <input type="color" value={(selectedItem as FrameItem).bgColor}
+                    onChange={e => updateBoardItem({...selectedItem as FrameItem, bgColor:e.target.value})}
+                    className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"/>
+                </div>
+                <span className="text-xs" style={{ color:"var(--brown-light)" }}>Свой цвет</span>
+              </label>
+            </>
+          )}
+        </div>,
+        document.body
       )}
 
       {/* Mobile toolbar */}
