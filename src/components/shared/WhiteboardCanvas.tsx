@@ -592,8 +592,8 @@ function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom = 1) {
   ctx.save();
   if (item.opacity !== undefined && item.opacity < 100) ctx.globalAlpha = item.opacity / 100;
   const bw = item.borderWidth ?? 2;
-  const borderColor = item.ownerColor ?? item.color;
-  ctx.fillStyle = item.ownerColor ? item.ownerColor + "22" : item.bgColor;
+  const borderColor = item.color;
+  ctx.fillStyle = item.bgColor;
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = bw;
   frameShapePath(ctx, item);
@@ -609,7 +609,7 @@ function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom = 1) {
     // avatar circle
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = borderColor;
+    ctx.fillStyle = item.ownerColor ?? borderColor;
     ctx.globalAlpha = (item.opacity !== undefined && item.opacity < 100) ? (item.opacity / 100) : 1;
     ctx.fill();
     // initial letter
@@ -619,7 +619,7 @@ function renderFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom = 1) {
     ctx.textBaseline = "middle";
     ctx.fillText(item.ownerName[0].toUpperCase(), cx, cy);
     // name text
-    ctx.fillStyle = borderColor;
+    ctx.fillStyle = item.ownerColor ?? borderColor;
     ctx.font = `bold ${fs}px sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -632,9 +632,8 @@ function renderPrivateFrame(ctx: CanvasRenderingContext2D, item: FrameItem, zoom
   ctx.filter = "blur(4px)";
   ctx.globalAlpha = 0.2;
   const bw = item.borderWidth ?? 2;
-  const borderColor = item.ownerColor ?? item.color;
-  ctx.fillStyle = item.ownerColor ? item.ownerColor + "33" : "#e8e8e8";
-  ctx.strokeStyle = borderColor;
+  ctx.fillStyle = item.bgColor;
+  ctx.strokeStyle = item.color;
   ctx.lineWidth = bw;
   frameShapePath(ctx, item);
   ctx.fill();
