@@ -1,6 +1,8 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { isCreator } from "@/lib/creatorMode";
 import { Resend } from "resend";
 
 const SUPPORT_EMAIL = process.env.CREATOR_EMAIL ?? "tkit.support@gmail.com";
@@ -21,7 +23,7 @@ export async function submitSupportMessage(formData: FormData) {
     await resend.emails.send({
       from: "T-Kit Support <onboarding@resend.dev>",
       to: SUPPORT_EMAIL,
-      ...(email ? { reply_to: email } : {}),
+      ...(email ? { replyTo: email } : {}),
       subject: "Новое сообщение в поддержку T-Kit",
       text: [
         email ? `От: ${email}` : "От: (без email — ответить нельзя)",
@@ -30,6 +32,30 @@ export async function submitSupportMessage(formData: FormData) {
       ].join("\n"),
     });
   }
+
+  return { ok: true };
+}
+
+export async function replyToSupport(id: string, toEmail: string, replyText: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || !isCreator(user.email)) return { error: "Нет доступа" };
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return { error: "Email не настроен (нет RESEND_API_KEY)" };
+
+  const resend = new Resend(apiKey);
+  const { error } = await resend.emails.send({
+    from: "T-Kit Support <onboarding@resend.dev>",
+    to: toEmail,
+    replyTo: SUPPORT_EMAIL,
+    subject: "Ответ от поддержки T-Kit",
+    text: replyText,
+  });
+  if (error) return { error: "Не удалось отправить письмо" };
+
+  const admin = createAdminClient();
+  await admin.from("support_messages").update({ replied_at: new Date().toISOString() }).eq("id", id);
 
   return { ok: true };
 }

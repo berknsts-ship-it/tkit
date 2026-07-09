@@ -5,6 +5,7 @@ import { isCreator } from "@/lib/creatorMode";
 import { setViewAs } from "@/app/actions/creator";
 import { listBetaCodes } from "@/app/actions/beta";
 import BetaCodesPanel from "./BetaCodesPanel";
+import SupportInbox from "./SupportInbox";
 import Link from "next/link";
 
 export default async function CreatorPage() {
@@ -23,10 +24,12 @@ export default async function CreatorPage() {
     { count: totalStudents },
     { count: totalLessons },
     betaCodes,
+    { data: supportMessages },
   ] = await Promise.all([
     admin.from("students").select("*", { count: "exact", head: true }),
     admin.from("lessons").select("*", { count: "exact", head: true }),
     listBetaCodes(),
+    admin.from("support_messages").select("id, email, message, created_at, replied_at").order("created_at", { ascending: false }),
   ]);
 
   return (
@@ -67,6 +70,20 @@ export default async function CreatorPage() {
         <h2 className="text-lg font-semibold mb-3">Бета-коды</h2>
         <div className="mb-8">
           <BetaCodesPanel initial={betaCodes as unknown as Parameters<typeof BetaCodesPanel>[0]["initial"]} />
+        </div>
+
+        {/* Обращения в поддержку */}
+        <h2 className="text-lg font-semibold mb-3">
+          Поддержка
+          {(supportMessages?.filter(m => !m.replied_at).length ?? 0) > 0 && (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{ background: "#fef3c7", color: "#92400e" }}>
+              {supportMessages!.filter(m => !m.replied_at).length} новых
+            </span>
+          )}
+        </h2>
+        <div className="mb-8">
+          <SupportInbox messages={(supportMessages ?? []) as Parameters<typeof SupportInbox>[0]["messages"]} />
         </div>
 
         {/* Список репетиторов */}
