@@ -12,8 +12,6 @@ type Message = {
 };
 
 export default function SupportInbox({ messages }: { messages: Message[] }) {
-  const [replyingId, setReplyingId] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState("");
   const [sent, setSent] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
 
@@ -21,86 +19,48 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
     return <p className="text-sm" style={{ color: "var(--brown-light)" }}>Обращений пока нет.</p>;
   }
 
-  function handleOpenMail(msg: Message) {
-    if (!replyText.trim() || !msg.email) return;
+  function handleReply(id: string, email: string, message: string) {
     const subject = encodeURIComponent("Ответ от поддержки T-Kit");
-    const body = encodeURIComponent(replyText.trim());
-    window.open(`mailto:${msg.email}?subject=${subject}&body=${body}`, "_blank");
-    // Mark as replied in DB
+    const body = encodeURIComponent(`> ${message}\n\n`);
+    window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_blank");
     startTransition(async () => {
-      await markSupportReplied(msg.id);
-      setSent(prev => new Set(prev).add(msg.id));
-      setReplyingId(null);
-      setReplyText("");
+      await markSupportReplied(id);
+      setSent(prev => new Set(prev).add(id));
     });
   }
 
   return (
     <div className="flex flex-col gap-3">
       {messages.map(msg => {
-        const isReplying = replyingId === msg.id;
         const isSent = sent.has(msg.id);
         const date = new Date(msg.created_at).toLocaleString("ru-RU", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
-        const repliedDate = msg.replied_at
-          ? new Date(msg.replied_at).toLocaleString("ru-RU", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })
-          : null;
+        const replied = msg.replied_at || isSent;
 
         return (
           <div key={msg.id} className="rounded-xl border px-4 py-3"
-            style={{ background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)",
-              opacity: (isSent || repliedDate) ? 0.7 : 1 }}>
+            style={{ background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)", opacity: replied ? 0.65 : 1 }}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="text-xs font-medium" style={{ color: "var(--brown-mid)" }}>
-                    {msg.email ?? "без email"}
-                  </span>
+                  <span className="text-xs font-medium" style={{ color: "var(--brown-mid)" }}>{msg.email ?? "без email"}</span>
                   <span className="text-xs" style={{ color: "var(--brown-light)" }}>{date}</span>
-                  {(isSent || repliedDate) && (
-                    <span className="text-xs px-2 py-0.5 rounded-full"
-                      style={{ background: "#e8f5e9", color: "#4a8a4a" }}>
-                      ✓ отвечено {repliedDate ?? "только что"}
+                  {replied && (
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#e8f5e9", color: "#4a8a4a" }}>
+                      ✓ отвечено
                     </span>
                   )}
                 </div>
                 <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--brown-dark)" }}>{msg.message}</p>
               </div>
-              {msg.email && !isSent && !repliedDate && (
+              {msg.email && !replied && (
                 <button
-                  onClick={() => { setReplyingId(isReplying ? null : msg.id); setReplyText(""); }}
-                  className="shrink-0 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all"
-                  style={{
-                    borderColor: isReplying ? "var(--brown-dark)" : "var(--brown-pale)",
-                    background: isReplying ? "var(--brown-pale)" : "transparent",
-                    color: "var(--brown-dark)",
-                  }}>
-                  {isReplying ? "Отмена" : "Ответить"}
+                  onClick={() => handleReply(msg.id, msg.email!, msg.message)}
+                  className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium text-white"
+                  style={{ background: "var(--gradient-primary)" }}>
+                  Ответить →
                 </button>
               )}
             </div>
-
-            {isReplying && (
-              <div className="mt-3 flex flex-col gap-2">
-                <textarea
-                  value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
-                  rows={4}
-                  placeholder={`Ответ для ${msg.email}...`}
-                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none resize-none"
-                  style={{ borderColor: "var(--brown-pale)", background: "var(--cream)", color: "var(--brown-dark)" }}
-                />
-                <p className="text-xs" style={{ color: "var(--brown-light)" }}>
-                  Откроется твой почтовый клиент с уже заполненным ответом — нажми "Отправить" там.
-                </p>
-                <button
-                  onClick={() => handleOpenMail(msg)}
-                  disabled={!replyText.trim()}
-                  className="self-end text-sm px-4 py-1.5 rounded-xl font-medium text-white disabled:opacity-50"
-                  style={{ background: "var(--gradient-primary)" }}>
-                  Открыть в почте →
-                </button>
-              </div>
-            )}
           </div>
         );
       })}
