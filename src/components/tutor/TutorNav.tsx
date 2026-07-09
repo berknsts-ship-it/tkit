@@ -24,6 +24,7 @@ const navLinks = [
   { href: "/tutor/materials",      label: "Материалы" },
   { href: "/tutor/notifications",  label: "Уведомления" },
   { href: "/tutor/board",          label: "Доска" },
+  { href: "/tutor/settings",       label: "Настройки" },
   { href: "/tutor/trainer",        label: "Тренажер",   proOnly: true },
   { href: "/tutor/reference",      label: "Справочник", proOnly: true },
   { href: "/tutor/vocabulary",     label: "Словарь",    proOnly: true, languageOnly: true },

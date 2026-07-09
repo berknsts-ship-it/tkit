@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import TKitLogo from "@/components/TKitLogo";
 import { GraduationCap, BookOpen, Star, Feather, PenLine } from "lucide-react";
@@ -21,10 +21,18 @@ const ICONS = [GraduationCap, BookOpen, Star, Feather, PenLine, GraduationCap, S
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
+  const [success,  setSuccess]  = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("message") === "password_reset") {
+      setSuccess("Пароль успешно изменён. Войдите с новым паролем.");
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
@@ -100,15 +108,23 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
-                Пароль
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium" style={{ color: "var(--brown-mid)" }}>
+                  Пароль
+                </label>
+                <Link href="/auth/forgot-password"
+                  className="text-xs hover:underline"
+                  style={{ color: "var(--brown-light)" }}>
+                  Забыли пароль?
+                </Link>
+              </div>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
                 placeholder="••••••••"
                 className="w-full px-4 py-2.5 rounded-xl border outline-none transition-colors"
                 style={{ borderColor: "var(--brown-pale)", background: "var(--cream)", color: "var(--brown-dark)" }} />
             </div>
 
+            {success && <p className="text-sm text-center font-medium" style={{ color: "#2a7a3a" }}>{success}</p>}
             {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
             <button type="submit" disabled={loading}

@@ -55,7 +55,7 @@ export default async function StudentPage({ params }: Props) {
       .order("created_at", { ascending: false }),
     supabase.from("notification_recipients").select("notification_id")
       .eq("student_id", student.id),
-    supabase.from("tutors").select("subject").eq("id", student.tutor_id).single(),
+    supabase.from("tutors").select("subject, meeting_url").eq("id", student.tutor_id).single(),
     supabase.from("notification_reads").select("notification_id").eq("student_id", student.id),
     supabase.from("notifications")
       .select("id, title, body, sent_at")
@@ -135,6 +135,7 @@ export default async function StudentPage({ params }: Props) {
       studentId={student.id}
       student={{ name: student.name }}
       subject={tutor?.subject ?? null}
+      meetingUrl={tutor?.meeting_url ?? null}
       lessons={lessons ?? []}
       homework={homework ?? []}
       materials={materials}

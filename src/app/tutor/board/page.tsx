@@ -22,14 +22,16 @@ export default async function BoardPage({ searchParams }: Props) {
   const todayStart = new Date(today); todayStart.setHours(0, 0, 0, 0);
   const todayEnd   = new Date(today); todayEnd.setHours(23, 59, 59, 999);
 
-  const [studentsRes, groupsRes, materialsRes] = await Promise.all([
+  const [studentsRes, groupsRes, materialsRes, tutorRes] = await Promise.all([
     db.from("students").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("groups").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("materials").select("id, title, file_url, file_name").eq("tutor_id", tutorId).order("created_at", { ascending: false }),
+    db.from("tutors").select("meeting_url").eq("id", tutorId).single(),
   ]);
-  const students  = studentsRes.data ?? [];
-  const groups    = groupsRes.data ?? [];
-  const materials = materialsRes.data ?? [];
+  const students   = studentsRes.data ?? [];
+  const groups     = groupsRes.data ?? [];
+  const materials  = materialsRes.data ?? [];
+  const meetingUrl = tutorRes.data?.meeting_url ?? null;
 
   let snapshots: { id: string; title: string; created_at: string; lesson_id: string | null; lessons?: { scheduled_at: string } | null }[] = [];
   let todayLesson: { id: string } | null = null;
@@ -123,6 +125,7 @@ export default async function BoardPage({ searchParams }: Props) {
           todayLessonId={todayLesson?.id}
           isGroup={!!groupId}
           groupStudents={groupStudents}
+          meetingUrl={meetingUrl}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">

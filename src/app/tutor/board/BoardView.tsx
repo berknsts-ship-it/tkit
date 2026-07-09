@@ -5,7 +5,7 @@ import WhiteboardCanvas, { BoardMaterial, WhiteboardRef } from "@/components/sha
 import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { saveSnapshot, deleteSnapshot, getSnapshotItems, renameSnapshot } from "@/app/actions/board";
-import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2 } from "lucide-react";
+import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2, Video } from "lucide-react";
 
 const EXTERNAL_BOARDS = [
   { label: "Miro",   hint: "Вставь ссылку на существующую доску Miro" },
@@ -21,7 +21,7 @@ type Snapshot = {
 };
 
 export default function BoardView({
-  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents,
+  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents, meetingUrl,
 }: {
   roomId: string;
   studentId?: string;
@@ -30,6 +30,7 @@ export default function BoardView({
   todayLessonId?: string;
   isGroup?: boolean;
   groupStudents?: { id: string; name: string }[];
+  meetingUrl?: string | null;
 }) {
   const canvasRef   = useRef<WhiteboardRef>(null);
   const canvasDivRef= useRef<HTMLDivElement>(null);
@@ -179,7 +180,7 @@ export default function BoardView({
               <Save size={13}/> <span className="hidden sm:inline">Сохранить конспект</span><span className="sm:hidden">Сохранить</span>
             </button>
           )}
-          {/* История + fullscreen в одной правой группе */}
+          {/* История + видео + fullscreen в одной правой группе */}
           <div className="flex items-center gap-1 shrink-0" style={{ marginLeft: "auto" }}>
             <button onClick={() => setShowHistory(h => !h)}
               className="flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg font-medium border-2 hover:opacity-80 shrink-0"
@@ -189,6 +190,13 @@ export default function BoardView({
               <span className="sm:hidden">{snapshots.length > 0 ? snapshots.length : ""}</span>
               <ChevronRight size={12} style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
             </button>
+            {meetingUrl && (
+              <a href={meetingUrl} target="_blank" rel="noopener noreferrer" title="Открыть видеозвонок"
+                className="p-1.5 rounded-lg border shrink-0 flex items-center"
+                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
+                <Video size={14}/>
+              </a>
+            )}
             <button onClick={() => setFullscreen(true)} title="На весь экран"
               className="p-1.5 rounded-lg border shrink-0"
               style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
@@ -197,11 +205,20 @@ export default function BoardView({
           </div>
         </>}
         {mode === "builtin" && isGroup && (
-          <button onClick={() => setFullscreen(true)} title="На весь экран"
-            className="p-1.5 rounded-lg border shrink-0"
-            style={{ marginLeft: "auto", borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
-            <Maximize2 size={14}/>
-          </button>
+          <div className="flex items-center gap-1 shrink-0" style={{ marginLeft: "auto" }}>
+            {meetingUrl && (
+              <a href={meetingUrl} target="_blank" rel="noopener noreferrer" title="Открыть видеозвонок"
+                className="p-1.5 rounded-lg border shrink-0 flex items-center"
+                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
+                <Video size={14}/>
+              </a>
+            )}
+            <button onClick={() => setFullscreen(true)} title="На весь экран"
+              className="p-1.5 rounded-lg border shrink-0"
+              style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
+              <Maximize2 size={14}/>
+            </button>
+          </div>
         )}
         {!(mode === "builtin") && (
           <span className="hidden sm:inline ml-auto text-xs" style={{ color: "var(--brown-light)" }}>

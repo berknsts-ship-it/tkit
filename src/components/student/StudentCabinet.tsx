@@ -15,7 +15,7 @@ import {
   ChevronDown, ChevronUp, Dumbbell, RotateCcw, ArrowLeft, ArrowRight, Volume2,
   BookOpen as BookOpenIcon, Globe, Languages, Feather, Scroll,
   Calculator, Atom, FlaskConical, Microscope, Zap, Binary,
-  Landmark, Map, Compass, GraduationCap, Star, Check, Undo2, Clock,
+  Landmark, Map, Compass, GraduationCap, Star, Check, Undo2, Clock, Video,
 } from "lucide-react";
 import StudentMaterials from "./StudentMaterials";
 import MarkdownContent from "@/components/shared/MarkdownContent";
@@ -79,6 +79,7 @@ interface Props {
   topics: VocabTopic[];
   unreadNotifications?: UnreadNotif[];
   trainerDecks?: TrainerDeck[];
+  meetingUrl?: string | null;
 }
 
 const TABS = [
@@ -91,12 +92,20 @@ const TABS = [
   { id: "reference", label: "Справочник", Icon: BookMarked    },
 ];
 
-export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [] }: Props) {
+export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [], meetingUrl }: Props) {
   const [tab,          setTab]          = useState("lessons");
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
   const canvasRef = useRef<WhiteboardRef>(null);
 
   const theme = (subject && SUBJECT_THEME[subject]) ? SUBJECT_THEME[subject] : DEFAULT_THEME;
+
+  const now = new Date();
+  const hasActiveMeeting = meetingUrl ? lessons.some(l => {
+    const start = new Date(l.scheduled_at);
+    const windowStart = new Date(start.getTime() - 15 * 60_000);
+    const windowEnd = new Date(start.getTime() + 60 * 60_000);
+    return now >= windowStart && now <= windowEnd;
+  }) : false;
 
   // ── Полноэкранный режим: Доска + просмотр конспекта ────────────────────────
   if (tab === "board" || (tab === "notes" && viewSnapshot)) {
@@ -135,6 +144,23 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
       <NotificationBanner studentId={studentId} notifications={unreadNotifications} />
+
+      {hasActiveMeeting && meetingUrl && (
+        <div className="px-4 py-3 flex items-center justify-between gap-3"
+          style={{ background: "linear-gradient(90deg, #2d6a4f 0%, #40916c 100%)" }}>
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }}>
+              <Video size={16} color="white" />
+            </div>
+            <span className="text-sm font-medium" style={{ color: "white" }}>Урок сейчас</span>
+          </div>
+          <a href={meetingUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-xl"
+            style={{ background: "white", color: "#2d6a4f", whiteSpace: "nowrap" }}>
+            <Video size={14} /> Войти на урок
+          </a>
+        </div>
+      )}
 
       {/* ── Hero ── */}
       <div className="relative overflow-hidden px-5 pt-8 pb-6" style={{ background: theme.gradient }}>
