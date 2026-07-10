@@ -1117,8 +1117,8 @@ function parseFormula(input: string): ((x: number) => number) | null {
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean; subjectProfile?: string; boardBg?: string }>(
-function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false, subjectProfile, boardBg }, ref) {
+const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean; subjectProfile?: string; boardBg?: string; studentName?: string }>(
+function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false, subjectProfile, boardBg, studentName }, ref) {
 
   const containerRef    = useRef<HTMLDivElement>(null);
   const canvasRef       = useRef<HTMLCanvasElement>(null);
@@ -2935,38 +2935,62 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     return () => { if (testIntervalRef.current) { clearInterval(testIntervalRef.current); testIntervalRef.current = null; } };
   }, [testMode, testFrozen]);
 
+  const isGroupMode = students.length > 0;
+
   const startTest = (durationMinutes: number) => {
-    // Create student frames if none exist yet
     const hasStudentFrames = itemsRef.current.some(it => it.type === "frame" && (it as FrameItem).ownerStudentId);
-    if (!hasStudentFrames && students.length > 0) {
-      const cols = Math.min(students.length, 3);
-      const fw = 280, fh = 200, gap = 24;
-      const totalW = cols * fw + (cols - 1) * gap;
-      const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
-      const canvas = canvasRef.current;
-      const vw = (canvas?.offsetWidth ?? 800) / vz;
-      const vh = (canvas?.offsetHeight ?? 600) / vz;
-      const sx = -vpx / vz + (vw - totalW) / 2;
-      const sy = -vpy / vz + (vh - Math.ceil(students.length / cols) * (fh + gap)) / 2;
-      students.forEach((s, i) => {
-        const col = i % cols, row = Math.floor(i / cols);
-        const oc = FRAME_COLORS[i % FRAME_COLORS.length];
+    if (!hasStudentFrames) {
+      if (isGroupMode) {
+        // Group: create one frame per student, enable privacy
+        const cols = Math.min(students.length, 3);
+        const fw = 280, fh = 200, gap = 24;
+        const totalW = cols * fw + (cols - 1) * gap;
+        const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
+        const canvas = canvasRef.current;
+        const vw = (canvas?.offsetWidth ?? 800) / vz;
+        const vh = (canvas?.offsetHeight ?? 600) / vz;
+        const sx = -vpx / vz + (vw - totalW) / 2;
+        const sy = -vpy / vz + (vh - Math.ceil(students.length / cols) * (fh + gap)) / 2;
+        students.forEach((s, i) => {
+          const col = i % cols, row = Math.floor(i / cols);
+          const oc = FRAME_COLORS[i % FRAME_COLORS.length];
+          const item: FrameItem = {
+            type: "frame", id: uid(),
+            x: sx + col * (fw + gap), y: sy + row * (fh + gap),
+            w: fw, h: fh, shape: "rounded", title: s.name,
+            color: oc, bgColor: oc + "22",
+            ownerName: s.name, ownerColor: oc, ownerStudentId: s.id,
+            private: true, borderWidth: 2,
+          };
+          itemsRef.current.push(item);
+          send({ type: "path", item });
+        });
+        privacyModeRef.current = true;
+        setPrivacyMode(true);
+        send({ type: "privacy_mode", enabled: true });
+      } else {
+        // Individual: create one frame for the student, no privacy needed
+        const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
+        const canvas = canvasRef.current;
+        const vw = (canvas?.offsetWidth ?? 800) / vz;
+        const vh = (canvas?.offsetHeight ?? 600) / vz;
+        const fw = 320, fh = 240;
         const item: FrameItem = {
           type: "frame", id: uid(),
-          x: sx + col * (fw + gap), y: sy + row * (fh + gap),
-          w: fw, h: fh, shape: "rounded", title: s.name,
-          color: oc, bgColor: oc + "22",
-          ownerName: s.name, ownerColor: oc, ownerStudentId: s.id,
-          private: true, borderWidth: 2,
+          x: -vpx / vz + (vw - fw) / 2,
+          y: -vpy / vz + (vh - fh) / 2 + 40,
+          w: fw, h: fh, shape: "rounded",
+          title: studentName ?? "Ученик",
+          color: FRAME_COLORS[0], bgColor: FRAME_COLORS[0] + "22",
+          ownerName: studentName ?? "Ученик",
+          ownerColor: FRAME_COLORS[0],
+          ownerStudentId: roomId,
+          private: false, borderWidth: 2,
         };
         itemsRef.current.push(item);
         send({ type: "path", item });
-      });
+      }
     }
-    // Enable privacy
-    privacyModeRef.current = true;
-    setPrivacyMode(true);
-    send({ type: "privacy_mode", enabled: true });
     // Start timer
     const endAt = Date.now() + durationMinutes * 60_000;
     testEndAtRef.current = endAt;
@@ -2995,7 +3019,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         ? { ...it, locked: true }
         : it
     ) as DrawItem[];
-    const allStudentIds = new Set(students.map(s => s.id));
+    const allStudentIds = isGroupMode ? new Set(students.map(s => s.id)) : new Set([roomId]);
     frozenStudentIdsRef.current = allStudentIds;
     setFrozenStudentIds(new Set(allStudentIds));
     setTestFrozen(true);
@@ -4171,12 +4195,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                       </button>
                     )}
 
-                    {/* ── TEST MODE CONTROLS ─────────────────────────────── */}
+                  </>
+                )}
+
+                {/* ── TEST MODE CONTROLS (individual + group) ──────────── */}
+                {role === "tutor" && (
+                  <>
                     {!testMode && !testFrozen && (
                       <div className="relative">
                         <button
                           onClick={() => setShowTestSetup(v => !v)}
-                          title="Режим теста — таймер, приватные фреймы, заморозка"
+                          title="Режим теста — таймер, фрейм ученика, заморозка"
                           className="text-xs px-2 py-1 rounded-lg font-medium border"
                           style={{ borderColor: showTestSetup ? "var(--brown-dark)" : "#8060d0", color: "#8060d0", background: showTestSetup ? "#f0ecff" : "transparent" }}>
                           ⏱ Тест
@@ -4186,7 +4215,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                             style={{ borderColor:"var(--brown-pale)", minWidth: 220 }}>
                             <div className="text-xs font-semibold mb-2" style={{ color:"var(--brown-dark)" }}>Режим теста</div>
                             <div className="text-xs mb-3" style={{ color:"var(--brown-mid)" }}>
-                              Создаст фреймы учеников, включит приватный режим и запустит таймер.
+                              {isGroupMode
+                                ? "Создаст фреймы учеников, включит приватный режим и запустит таймер."
+                                : "Создаст фрейм для ученика и запустит таймер."}
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
                               <span className="text-xs" style={{ color:"var(--brown-mid)", flexShrink:0 }}>Время (мин):</span>
@@ -4237,16 +4268,28 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
 
                     {testFrozen && (
                       <>
-                        {students.map(s => (
-                          <button key={s.id}
-                            onClick={() => unlockStudentFrame(s.id)}
-                            disabled={!frozenStudentIds.has(s.id)}
-                            title={`Разморозить фрейм ${s.name}`}
-                            className="text-xs px-2 py-1 rounded-lg border font-medium disabled:opacity-30"
-                            style={{ borderColor:"#20a060", color:"#20a060", background:"transparent" }}>
-                            ▶ {s.name}
-                          </button>
-                        ))}
+                        {isGroupMode
+                          ? students.map(s => (
+                            <button key={s.id}
+                              onClick={() => unlockStudentFrame(s.id)}
+                              disabled={!frozenStudentIds.has(s.id)}
+                              title={`Разморозить фрейм ${s.name}`}
+                              className="text-xs px-2 py-1 rounded-lg border font-medium disabled:opacity-30"
+                              style={{ borderColor:"#20a060", color:"#20a060", background:"transparent" }}>
+                              ▶ {s.name}
+                            </button>
+                          ))
+                          : (
+                            <button
+                              onClick={() => unlockStudentFrame(roomId)}
+                              disabled={!frozenStudentIds.has(roomId)}
+                              title={`Разморозить фрейм ${studentName ?? "ученика"}`}
+                              className="text-xs px-2 py-1 rounded-lg border font-medium disabled:opacity-30"
+                              style={{ borderColor:"#20a060", color:"#20a060", background:"transparent" }}>
+                              ▶ {studentName ?? "Ученик"}
+                            </button>
+                          )
+                        }
                         <button
                           onClick={() => {
                             setTestMode(false); setTestFrozen(false);

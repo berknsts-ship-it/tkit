@@ -121,6 +121,7 @@ export default async function BoardPage({ searchParams }: Props) {
         <BoardView
           roomId={roomId}
           studentId={studentId}
+          studentName={activeStudent?.name}
           materials={materials as BoardMaterial[]}
           snapshots={studentId ? snapshots : []}
           todayLessonId={todayLesson?.id}
