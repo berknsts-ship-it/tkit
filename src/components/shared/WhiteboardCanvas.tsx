@@ -4211,7 +4211,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                           ⏱ Тест
                         </button>
                         {showTestSetup && (
-                          <div className="absolute top-full mt-1 left-0 z-30 bg-white rounded-xl border shadow-lg p-3"
+                          <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-3"
                             style={{ borderColor:"var(--brown-pale)", minWidth: 220 }}>
                             <div className="text-xs font-semibold mb-2" style={{ color:"var(--brown-dark)" }}>Режим теста</div>
                             <div className="text-xs mb-3" style={{ color:"var(--brown-mid)" }}>
