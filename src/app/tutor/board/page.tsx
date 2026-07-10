@@ -26,12 +26,11 @@ export default async function BoardPage({ searchParams }: Props) {
     db.from("students").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("groups").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("materials").select("id, title, file_url, file_name").eq("tutor_id", tutorId).order("created_at", { ascending: false }),
-    db.from("tutors").select("meeting_url, subject_profile, board_bg").eq("id", tutorId).single(),
+    db.from("tutors").select("subject_profile, board_bg").eq("id", tutorId).single(),
   ]);
   const students   = studentsRes.data ?? [];
   const groups     = groupsRes.data ?? [];
   const materials  = materialsRes.data ?? [];
-  const meetingUrl     = tutorRes.data?.meeting_url     ?? null;
   const subjectProfile = tutorRes.data?.subject_profile ?? "other";
   const boardBg        = tutorRes.data?.board_bg        ?? "dots";
 
@@ -127,7 +126,6 @@ export default async function BoardPage({ searchParams }: Props) {
           todayLessonId={todayLesson?.id}
           isGroup={!!groupId}
           groupStudents={groupStudents}
-          meetingUrl={meetingUrl}
           subjectProfile={subjectProfile}
           boardBg={boardBg}
         />

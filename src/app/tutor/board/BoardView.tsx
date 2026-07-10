@@ -5,7 +5,7 @@ import WhiteboardCanvas, { BoardMaterial, WhiteboardRef } from "@/components/sha
 import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { saveSnapshot, deleteSnapshot, getSnapshotItems, renameSnapshot } from "@/app/actions/board";
-import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2, Video } from "lucide-react";
+import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2 } from "lucide-react";
 
 const EXTERNAL_BOARDS = [
   { label: "Miro",   hint: "Вставь ссылку на существующую доску Miro" },
@@ -21,7 +21,7 @@ type Snapshot = {
 };
 
 export default function BoardView({
-  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents, meetingUrl, subjectProfile, boardBg,
+  roomId, studentId, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents, subjectProfile, boardBg,
 }: {
   roomId: string;
   studentId?: string;
@@ -30,7 +30,6 @@ export default function BoardView({
   todayLessonId?: string;
   isGroup?: boolean;
   groupStudents?: { id: string; name: string }[];
-  meetingUrl?: string | null;
   subjectProfile?: string;
   boardBg?: string;
 }) {
@@ -192,13 +191,6 @@ export default function BoardView({
               <span className="sm:hidden">{snapshots.length > 0 ? snapshots.length : ""}</span>
               <ChevronRight size={12} style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
             </button>
-            {meetingUrl && (
-              <a href={meetingUrl} target="_blank" rel="noopener noreferrer" title="Открыть видеозвонок"
-                className="p-1.5 rounded-lg border shrink-0 flex items-center"
-                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
-                <Video size={14}/>
-              </a>
-            )}
             <button onClick={() => setFullscreen(true)} title="На весь экран"
               className="p-1.5 rounded-lg border shrink-0"
               style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
@@ -208,13 +200,6 @@ export default function BoardView({
         </>}
         {mode === "builtin" && isGroup && (
           <div className="flex items-center gap-1 shrink-0" style={{ marginLeft: "auto" }}>
-            {meetingUrl && (
-              <a href={meetingUrl} target="_blank" rel="noopener noreferrer" title="Открыть видеозвонок"
-                className="p-1.5 rounded-lg border shrink-0 flex items-center"
-                style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
-                <Video size={14}/>
-              </a>
-            )}
             <button onClick={() => setFullscreen(true)} title="На весь экран"
               className="p-1.5 rounded-lg border shrink-0"
               style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
