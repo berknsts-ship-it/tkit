@@ -8,7 +8,7 @@ import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
   Maximize2, Hand, Navigation, Undo2, Redo2, Pointer, Lock, Unlock, ImagePlus, Link, FileText,
-  Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile, Sparkles,
+  Shapes, LayoutTemplate, Map as MapIcon, Minimize2, Magnet, Smile, Sparkles, Omega, SquareFunction,
   ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, LocateFixed, LockKeyhole, LockKeyholeOpen,
 } from "lucide-react";
 
@@ -3513,8 +3513,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
           <span className="text-base leading-none">😊</span>
         </SideBtn>
         {!profileHide.has("formula") && (
-          <SideBtn active={showFormulaPanel} onClick={()=>{setShowFormulaPanel(v=>!v);setShowCodePanel(false);}} title="Формула LaTeX [∑]">
-            <span className="text-sm font-bold leading-none">∑</span>
+          <SideBtn active={showFormulaPanel} onClick={()=>{setShowFormulaPanel(v=>!v);setShowCodePanel(false);}} title="Формула LaTeX">
+            <SquareFunction size={16}/>
           </SideBtn>
         )}
         {!profileHide.has("code") && (
@@ -3551,7 +3551,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                   className="flex flex-col items-center gap-1 p-2 rounded-xl border hover:opacity-70"
                   style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
-                  <span className="text-xl">∑</span><span className="text-xs">Символы</span>
+                  <Omega size={20}/><span className="text-xs">Символы</span>
                 </button>
                 {/* Dice */}
                 <button onClick={()=>{setShowDice(v=>!v);setShowMoreTools(false);}}
@@ -5884,7 +5884,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
               onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
               className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
               style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
-              <span className="text-lg">∑</span><span className="text-xs">Символы</span>
+              <Omega size={18}/><span className="text-xs">Символы</span>
             </button>
             <button onClick={()=>{setShowDice(v=>!v);setShowMoreTools(false);}}
               onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
