@@ -3773,14 +3773,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-2"
                     style={{ borderColor:"var(--brown-pale)", minWidth:320 }}>
                     <div className="text-xs mb-1.5" style={{ color:"var(--brown-mid)" }}>LaTeX-формула. Например: \frac{"{a}{b}"}, x^2+y^2</div>
-                    <form className="flex items-center gap-1" onSubmit={e => { e.preventDefault(); addFormulaToBoard(); }}>
+                    <form onSubmit={e => { e.preventDefault(); addFormulaToBoard(); }}
+                      style={{ display:"flex", alignItems:"center", gap:8 }}>
                       <input value={formulaInput} onChange={e => setFormulaInput(e.target.value)}
                         placeholder="\frac{a}{b}, \int_0^1 x\,dx" autoFocus autoComplete="off" spellCheck={false}
-                        className="text-sm font-mono px-2 py-1 rounded-lg border outline-none flex-1"
-                        style={{ borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                        className="text-sm font-mono rounded-lg border outline-none"
+                        style={{ flex:1, minWidth:0, padding:"6px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
                       <button type="submit" disabled={!formulaInput.trim()}
-                        className="text-sm px-3 py-1 rounded-lg font-medium shrink-0 disabled:opacity-40"
-                        style={{ background:"var(--gradient-primary)", color:"white" }}>
+                        className="text-sm rounded-lg font-medium disabled:opacity-40"
+                        style={{ padding:"6px 12px", background:"var(--gradient-primary)", color:"white", whiteSpace:"nowrap", flexShrink:0 }}>
                         Добавить
                       </button>
                     </form>
@@ -3839,15 +3840,16 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   <div className="text-xs mb-1.5" style={{ color:"var(--brown-mid)" }}>
                     График вставляется как объект — можно двигать и масштабировать
                   </div>
-                  <form className="flex items-center gap-1" onSubmit={e => { e.preventDefault(); addFunction(); setShowFnPanel(false); }}>
-                    <span className="text-sm font-mono shrink-0" style={{ color:"var(--brown-mid)" }}>y =</span>
+                  <form onSubmit={e => { e.preventDefault(); addFunction(); setShowFnPanel(false); }}
+                    style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span className="text-sm font-mono" style={{ color:"var(--brown-mid)", flexShrink:0 }}>y =</span>
                     <input value={fnFormula} onChange={e => { setFnFormula(e.target.value); setFnError(false); }}
                       placeholder="x², sin(x), 2x+1…" autoComplete="off" spellCheck={false} autoFocus
-                      className="text-sm font-mono px-2 py-1 rounded-lg border outline-none flex-1"
-                      style={{ borderColor: fnError ? "#e05050" : "var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                      className="text-sm font-mono rounded-lg border outline-none"
+                      style={{ flex:1, minWidth:0, padding:"6px 8px", borderColor: fnError ? "#e05050" : "var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
                     <button type="submit" disabled={!fnFormula.trim()}
-                      className="text-sm px-3 py-1 rounded-lg font-medium shrink-0 disabled:opacity-40"
-                      style={{ background:"var(--gradient-primary)", color:"white" }}>
+                      className="text-sm rounded-lg font-medium disabled:opacity-40"
+                      style={{ padding:"6px 12px", background:"var(--gradient-primary)", color:"white", whiteSpace:"nowrap", flexShrink:0 }}>
                       Добавить
                     </button>
                   </form>
