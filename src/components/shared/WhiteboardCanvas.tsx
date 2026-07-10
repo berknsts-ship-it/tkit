@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
 import { flushSync, createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
-import { saveBoardState, loadBoardState } from "@/app/actions/board";
+import { saveBoardState, loadBoardState, saveSnapshot } from "@/app/actions/board";
 import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
@@ -142,7 +142,11 @@ type WsEvent =
   | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number }
   | { type: "privacy_mode"; enabled: boolean }
   | { type: "reveal_all" }
-  | { type: "hide_all" };
+  | { type: "hide_all" }
+  | { type: "test_start"; end_at: number; duration_minutes: number }
+  | { type: "test_extend"; add_minutes: number }
+  | { type: "test_end" }
+  | { type: "frame_unlock"; student_id: string };
 
 // ── image cache ───────────────────────────────────────────────────────────────
 const imgCache = new Map<string, HTMLImageElement>();
@@ -1160,6 +1164,19 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [codeLang,         setCodeLang]         = useState("python");
   const showDotsRef = useRef(boardBg !== "blank");
 
+  // ── Test mode ────────────────────────────────────────────────────────────────
+  const [testMode,          setTestMode]          = useState(false);
+  const [testFrozen,        setTestFrozen]        = useState(false);
+  const [testSecondsLeft,   setTestSecondsLeft]   = useState(0);
+  const [frozenStudentIds,  setFrozenStudentIds]  = useState<Set<string>>(new Set());
+  const [showTestSetup,     setShowTestSetup]     = useState(false);
+  const [testDurationInput, setTestDurationInput] = useState(20);
+  const [myFrozen,          setMyFrozen]          = useState(false);
+  const testEndAtRef        = useRef<number | null>(null);
+  const testIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const frozenStudentIdsRef = useRef(new Set<string>());
+  const myFrozenRef         = useRef(false);
+
   const profileHide = useMemo(() => {
     const p = subjectProfile ?? "other";
     if (p === "english")  return new Set(["formula", "code"]);
@@ -1830,6 +1847,53 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         ) as DrawItem[];
         privacyModeRef.current = true;
         setPrivacyMode(true);
+        render(); return;
+      }
+      if (payload.type === "test_start") {
+        testEndAtRef.current = payload.end_at;
+        setTestMode(true);
+        setTestFrozen(false);
+        myFrozenRef.current = false;
+        setMyFrozen(false);
+        frozenStudentIdsRef.current = new Set();
+        setFrozenStudentIds(new Set());
+        setTestSecondsLeft(Math.max(0, Math.ceil((payload.end_at - Date.now()) / 1000)));
+        return;
+      }
+      if (payload.type === "test_extend") {
+        if (testEndAtRef.current) {
+          testEndAtRef.current = testEndAtRef.current + payload.add_minutes * 60_000;
+          setTestSecondsLeft(Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000)));
+        }
+        return;
+      }
+      if (payload.type === "test_end") {
+        // Lock all student frames on clients
+        itemsRef.current = itemsRef.current.map(it =>
+          it.type === "frame" && (it as FrameItem).ownerStudentId ? { ...it, locked: true } : it
+        ) as DrawItem[];
+        setTestFrozen(true);
+        // For students: freeze self
+        if (role !== "tutor") {
+          myFrozenRef.current = true;
+          setMyFrozen(true);
+        }
+        render(); return;
+      }
+      if (payload.type === "frame_unlock") {
+        // Unlock a specific student's frame
+        itemsRef.current = itemsRef.current.map(it =>
+          it.type === "frame" && (it as FrameItem).ownerStudentId === payload.student_id
+            ? { ...it, locked: false }
+            : it
+        ) as DrawItem[];
+        frozenStudentIdsRef.current = new Set([...frozenStudentIdsRef.current].filter(id => id !== payload.student_id));
+        setFrozenStudentIds(new Set(frozenStudentIdsRef.current));
+        // If student unfreezes themselves
+        if (role !== "tutor" && currentStudentId === payload.student_id) {
+          myFrozenRef.current = false;
+          setMyFrozen(false);
+        }
         render(); return;
       }
       if (payload.type === "video_sync") {
@@ -2856,6 +2920,119 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     itemsRef.current = itemsRef.current.map(it => ({ ...it, locked })) as DrawItem[];
     render();
     send({ type: "lock_all", locked });
+  };
+
+  // ── Test mode helpers ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!testMode || testFrozen) {
+      if (testIntervalRef.current) { clearInterval(testIntervalRef.current); testIntervalRef.current = null; }
+      return;
+    }
+    testIntervalRef.current = setInterval(() => {
+      if (!testEndAtRef.current) return;
+      setTestSecondsLeft(Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000)));
+    }, 500);
+    return () => { if (testIntervalRef.current) { clearInterval(testIntervalRef.current); testIntervalRef.current = null; } };
+  }, [testMode, testFrozen]);
+
+  const startTest = (durationMinutes: number) => {
+    // Create student frames if none exist yet
+    const hasStudentFrames = itemsRef.current.some(it => it.type === "frame" && (it as FrameItem).ownerStudentId);
+    if (!hasStudentFrames && students.length > 0) {
+      const cols = Math.min(students.length, 3);
+      const fw = 280, fh = 200, gap = 24;
+      const totalW = cols * fw + (cols - 1) * gap;
+      const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
+      const canvas = canvasRef.current;
+      const vw = (canvas?.offsetWidth ?? 800) / vz;
+      const vh = (canvas?.offsetHeight ?? 600) / vz;
+      const sx = -vpx / vz + (vw - totalW) / 2;
+      const sy = -vpy / vz + (vh - Math.ceil(students.length / cols) * (fh + gap)) / 2;
+      students.forEach((s, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const oc = FRAME_COLORS[i % FRAME_COLORS.length];
+        const item: FrameItem = {
+          type: "frame", id: uid(),
+          x: sx + col * (fw + gap), y: sy + row * (fh + gap),
+          w: fw, h: fh, shape: "rounded", title: s.name,
+          color: oc, bgColor: oc + "22",
+          ownerName: s.name, ownerColor: oc, ownerStudentId: s.id,
+          private: true, borderWidth: 2,
+        };
+        itemsRef.current.push(item);
+        send({ type: "path", item });
+      });
+    }
+    // Enable privacy
+    privacyModeRef.current = true;
+    setPrivacyMode(true);
+    send({ type: "privacy_mode", enabled: true });
+    // Start timer
+    const endAt = Date.now() + durationMinutes * 60_000;
+    testEndAtRef.current = endAt;
+    setTestMode(true);
+    setTestFrozen(false);
+    setMyFrozen(false);
+    myFrozenRef.current = false;
+    frozenStudentIdsRef.current = new Set();
+    setFrozenStudentIds(new Set());
+    setTestSecondsLeft(durationMinutes * 60);
+    send({ type: "test_start", end_at: endAt, duration_minutes: durationMinutes });
+    render();
+  };
+
+  const extendTest = (addMinutes: number) => {
+    if (!testEndAtRef.current) return;
+    testEndAtRef.current += addMinutes * 60_000;
+    setTestSecondsLeft(Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000)));
+    send({ type: "test_extend", add_minutes: addMinutes });
+  };
+
+  const endTest = async () => {
+    // Lock all student frames
+    itemsRef.current = itemsRef.current.map(it =>
+      it.type === "frame" && (it as FrameItem).ownerStudentId
+        ? { ...it, locked: true }
+        : it
+    ) as DrawItem[];
+    const allStudentIds = new Set(students.map(s => s.id));
+    frozenStudentIdsRef.current = allStudentIds;
+    setFrozenStudentIds(new Set(allStudentIds));
+    setTestFrozen(true);
+    send({ type: "test_end" });
+    render();
+    // Auto-save snapshot
+    const dateStr = new Date().toLocaleDateString("ru", { day: "numeric", month: "long" });
+    await saveSnapshot(
+      roomId,
+      `Тест ${dateStr}`,
+      itemsRef.current as unknown[],
+      undefined,
+      { testMode: true, testStatus: "completed", testDurationMinutes: testDurationInput, isGroup: students.length > 0 },
+    );
+  };
+
+  const saveTestProgress = async () => {
+    const dateStr = new Date().toLocaleDateString("ru", { day: "numeric", month: "long" });
+    await saveSnapshot(
+      roomId,
+      `Тест ${dateStr} (в процессе)`,
+      itemsRef.current as unknown[],
+      undefined,
+      { testMode: true, testStatus: "in_progress", testDurationMinutes: testDurationInput, isGroup: students.length > 0 },
+    );
+  };
+
+  const unlockStudentFrame = (studentId: string) => {
+    itemsRef.current = itemsRef.current.map(it =>
+      it.type === "frame" && (it as FrameItem).ownerStudentId === studentId
+        ? { ...it, locked: false }
+        : it
+    ) as DrawItem[];
+    frozenStudentIdsRef.current = new Set([...frozenStudentIdsRef.current].filter(id => id !== studentId));
+    setFrozenStudentIds(new Set(frozenStudentIdsRef.current));
+    send({ type: "frame_unlock", student_id: studentId });
+    render();
   };
 
   // ── layer order helpers ──────────────────────────────────────────────────────
@@ -3993,6 +4170,96 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                         Скрыть ответы
                       </button>
                     )}
+
+                    {/* ── TEST MODE CONTROLS ─────────────────────────────── */}
+                    {!testMode && !testFrozen && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowTestSetup(v => !v)}
+                          title="Режим теста — таймер, приватные фреймы, заморозка"
+                          className="text-xs px-2 py-1 rounded-lg font-medium border"
+                          style={{ borderColor: showTestSetup ? "var(--brown-dark)" : "#8060d0", color: "#8060d0", background: showTestSetup ? "#f0ecff" : "transparent" }}>
+                          ⏱ Тест
+                        </button>
+                        {showTestSetup && (
+                          <div className="absolute top-full mt-1 left-0 z-30 bg-white rounded-xl border shadow-lg p-3"
+                            style={{ borderColor:"var(--brown-pale)", minWidth: 220 }}>
+                            <div className="text-xs font-semibold mb-2" style={{ color:"var(--brown-dark)" }}>Режим теста</div>
+                            <div className="text-xs mb-3" style={{ color:"var(--brown-mid)" }}>
+                              Создаст фреймы учеников, включит приватный режим и запустит таймер.
+                            </div>
+                            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                              <span className="text-xs" style={{ color:"var(--brown-mid)", flexShrink:0 }}>Время (мин):</span>
+                              <input type="number" min={1} max={180} value={testDurationInput}
+                                onChange={e => setTestDurationInput(Math.max(1, parseInt(e.target.value) || 20))}
+                                className="text-sm rounded-lg border outline-none"
+                                style={{ width:60, padding:"4px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                            </div>
+                            <button
+                              onClick={() => { setShowTestSetup(false); startTest(testDurationInput); }}
+                              className="w-full text-sm rounded-lg font-semibold text-white"
+                              style={{ padding:"7px 0", background:"#8060d0" }}>
+                              Начать тест
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {testMode && !testFrozen && (
+                      <>
+                        <button onClick={() => extendTest(5)}
+                          title="Добавить 5 минут"
+                          className="text-xs px-2 py-1 rounded-lg border font-medium"
+                          style={{ borderColor:"#8060d0", color:"#8060d0", background:"transparent" }}>
+                          +5 мин
+                        </button>
+                        <button onClick={() => extendTest(10)}
+                          title="Добавить 10 минут"
+                          className="text-xs px-2 py-1 rounded-lg border font-medium"
+                          style={{ borderColor:"#8060d0", color:"#8060d0", background:"transparent" }}>
+                          +10 мин
+                        </button>
+                        <button onClick={() => saveTestProgress()}
+                          title="Сохранить прогресс теста и продолжить позже"
+                          className="text-xs px-2 py-1 rounded-lg border font-medium"
+                          style={{ borderColor:"var(--brown-pale)", color:"var(--brown-mid)", background:"transparent" }}>
+                          Сохранить
+                        </button>
+                        <button onClick={endTest}
+                          title="Завершить тест — заморозить фреймы и сохранить снапшот"
+                          className="text-xs px-2 py-1 rounded-lg font-semibold"
+                          style={{ background:"#c03030", color:"white", border:"none" }}>
+                          Завершить тест
+                        </button>
+                      </>
+                    )}
+
+                    {testFrozen && (
+                      <>
+                        {students.map(s => (
+                          <button key={s.id}
+                            onClick={() => unlockStudentFrame(s.id)}
+                            disabled={!frozenStudentIds.has(s.id)}
+                            title={`Разморозить фрейм ${s.name}`}
+                            className="text-xs px-2 py-1 rounded-lg border font-medium disabled:opacity-30"
+                            style={{ borderColor:"#20a060", color:"#20a060", background:"transparent" }}>
+                            ▶ {s.name}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => {
+                            setTestMode(false); setTestFrozen(false);
+                            frozenStudentIdsRef.current = new Set();
+                            setFrozenStudentIds(new Set());
+                          }}
+                          title="Закрыть режим теста"
+                          className="text-xs px-2 py-1 rounded-lg border font-medium"
+                          style={{ borderColor:"var(--brown-pale)", color:"var(--brown-mid)", background:"transparent" }}>
+                          × Закрыть
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
               </>
@@ -4043,6 +4310,43 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         }}>
 
         <canvas ref={canvasRef} className="absolute inset-0" style={{ touchAction:"none" }} />
+
+        {/* Test mode timer overlay — visible to all participants */}
+        {testMode && (
+          <div style={{
+            position: "absolute", top: 10, right: 10, zIndex: 30,
+            background: testSecondsLeft <= 0 ? "#c03030" : testSecondsLeft <= 60 ? "#d06000" : "rgba(30,30,30,0.82)",
+            color: "white",
+            borderRadius: 10,
+            padding: "6px 12px",
+            display: "flex", flexDirection: "column", alignItems: "center",
+            animation: testSecondsLeft <= 0 ? "testblink 1s step-end infinite" : undefined,
+            minWidth: 72, pointerEvents: "none",
+          }}>
+            <span style={{ fontSize: 11, opacity: 0.8, letterSpacing: 1, textTransform: "uppercase" }}>Тест</span>
+            <span style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
+              {String(Math.floor(Math.max(0, testSecondsLeft) / 60)).padStart(2, "0")}:{String(Math.max(0, testSecondsLeft) % 60).padStart(2, "0")}
+            </span>
+            {testFrozen && <span style={{ fontSize: 10, opacity: 0.85, marginTop: 2 }}>завершён</span>}
+          </div>
+        )}
+
+        {/* Frozen overlay for students — prevents drawing when test is ended */}
+        {myFrozen && role !== "tutor" && (
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 29,
+            background: "rgba(30,30,30,0.18)",
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+            paddingBottom: 80, pointerEvents: "all",
+          }}>
+            <div style={{
+              background: "rgba(30,30,30,0.85)", color: "white",
+              borderRadius: 14, padding: "10px 22px", fontSize: 14, fontWeight: 500,
+            }}>
+              Тест завершён — ожидайте результатов
+            </div>
+          </div>
+        )}
 
         {/* Video overlays */}
         {itemsRef.current.filter(it => it.type === "video").map(it => {

@@ -4,19 +4,30 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
-export async function saveSnapshot(studentId: string, title: string, items: unknown[], lessonId?: string) {
+export async function saveSnapshot(
+  roomId: string,
+  title:  string,
+  items:  unknown[],
+  lessonId?: string,
+  testOpts?: { testMode?: boolean; testStatus?: string; testDurationMinutes?: number; isGroup?: boolean },
+) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
+  const isGroup = testOpts?.isGroup ?? false;
   await supabase.from("board_snapshots").insert({
     tutor_id:   user.id,
-    student_id: studentId,
+    student_id: isGroup ? null : roomId,
+    group_id:   isGroup ? roomId : null,
     lesson_id:  lessonId ?? null,
     title:      title.trim() || new Date().toLocaleDateString("ru", { day: "numeric", month: "long", year: "numeric" }),
     items,
+    test_mode:              testOpts?.testMode ?? false,
+    test_status:            testOpts?.testStatus ?? null,
+    test_duration_minutes:  testOpts?.testDurationMinutes ?? null,
   });
-  revalidatePath(`/tutor/board/${studentId}`);
+  revalidatePath("/tutor/board");
 }
 
 export async function updateSnapshot(id: string, items: unknown[]) {
