@@ -14,6 +14,7 @@ export default async function DashboardPage() {
     { count: lessonsCount },
     { count: hwCount },
     { data: unpaidLessons },
+    { data: tutorPlan },
   ] = await Promise.all([
     db.from("students").select("*", { count: "exact", head: true }).eq("tutor_id", tutorId),
     db.from("lessons").select("*", { count: "exact", head: true })
@@ -24,9 +25,17 @@ export default async function DashboardPage() {
       .eq("tutor_id", tutorId)
       .eq("payment_status", "unpaid")
       .neq("status", "cancelled"),
+    db.from("tutors").select("plan, plan_expires_at").eq("id", tutorId).single(),
   ]);
 
   const unpaidTotal = (unpaidLessons ?? []).reduce((s, l) => s + (l.price_rub ?? 0), 0);
+
+  const plan = tutorPlan?.plan ?? "free";
+  const expiresAt = tutorPlan?.plan_expires_at ? new Date(tutorPlan.plan_expires_at) : null;
+  const isPermanent = expiresAt && expiresAt.getFullYear() >= 2099;
+  const daysLeft = expiresAt && !isPermanent
+    ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000)
+    : null;
 
   const cardStyle = {
     background: "white",
@@ -37,6 +46,28 @@ export default async function DashboardPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Главная</h1>
+
+      {/* Баннер тарифного плана */}
+      {plan === "free" && (
+        <Link href="/tutor/subscription"
+          className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 mb-6 border"
+          style={{ background: "#fff8e6", borderColor: "#f0c040", color: "#a06800" }}>
+          <span className="text-sm font-medium">Пробный период завершён — узнать о тарифах</span>
+          <span className="text-sm font-semibold shrink-0">Подробнее →</span>
+        </Link>
+      )}
+      {plan === "pro" && daysLeft !== null && daysLeft <= 14 && (
+        <Link href="/tutor/subscription"
+          className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 mb-6 border"
+          style={{ background: daysLeft <= 3 ? "#fff0f0" : "#fff8e6",
+                   borderColor: daysLeft <= 3 ? "#f09090" : "#f0c040",
+                   color: daysLeft <= 3 ? "#c03030" : "#a06800" }}>
+          <span className="text-sm font-medium">
+            {daysLeft <= 0 ? "Тариф истёк" : `До окончания тарифа: ${daysLeft} ${daysLeft === 1 ? "день" : daysLeft < 5 ? "дня" : "дней"}`}
+          </span>
+          <span className="text-sm font-semibold shrink-0">Продлить →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <Link href="/tutor/students" className="rounded-2xl p-5 border quick-action transition-all" style={cardStyle}>
