@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
 import { flushSync, createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { saveBoardState, loadBoardState } from "@/app/actions/board";
@@ -112,7 +112,19 @@ type CardItem = {
   rotation: number;
   locked?: boolean; pdfPage?: number;
 };
-type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | DiceItem | WheelItem | TableItem | FunctionItem | CardItem;
+type FormulaItem = {
+  type: "formula"; id: string;
+  x: number; y: number; w: number; h: number;
+  latex: string; color: string; fontSize: number;
+  locked?: boolean;
+};
+type CodeItem = {
+  type: "code"; id: string;
+  x: number; y: number; w: number; h: number;
+  content: string; language: string;
+  locked?: boolean;
+};
+type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | DiceItem | WheelItem | TableItem | FunctionItem | CardItem | FormulaItem | CodeItem;
 
 type WsEvent =
   | { type: "path-pt"; id: string; x: number; y: number; color: string; size: number; eraser: boolean; highlight: boolean }
@@ -405,6 +417,8 @@ function itemBounds(item: DrawItem) {
   if (item.type === "table")    return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   if (item.type === "function") return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   if (item.type === "card")     return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
+  if (item.type === "formula") return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
+  if (item.type === "code")    return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   return item.type === "path" ? pathBounds(item) : textBounds(item as TextItem);
 }
 function hitTest(item: DrawItem, wx: number, wy: number): boolean {
@@ -434,6 +448,8 @@ function shiftItem(item: DrawItem, dx: number, dy: number): DrawItem {
   if (item.type === "table")    return { ...item, x: item.x + dx, y: item.y + dy };
   if (item.type === "function") return { ...item, x: item.x + dx, y: item.y + dy };
   if (item.type === "card")     return { ...item, x: item.x + dx, y: item.y + dy };
+  if (item.type === "formula") return { ...item, x: item.x + dx, y: item.y + dy };
+  if (item.type === "code")    return { ...item, x: item.x + dx, y: item.y + dy };
   const ti = item as TextItem;
   return { ...ti, x: ti.x + dx, y: ti.y + dy };
 }
@@ -977,7 +993,64 @@ function renderItem(ctx: CanvasRenderingContext2D, item: DrawItem, zoom: number,
     if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
     return;
   }
+  if (item.type === "formula") {
+    ctx.save();
+    ctx.fillStyle = "rgba(237,233,254,0.9)";
+    ctx.fillRect(item.x, item.y, item.w, item.h);
+    ctx.strokeStyle = "#7c3aed"; ctx.lineWidth = 1.5 / zoom;
+    ctx.strokeRect(item.x, item.y, item.w, item.h);
+    ctx.fillStyle = "#7c3aed";
+    ctx.font = `bold ${Math.min(18/zoom, item.h * 0.5)}px sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("∑", item.x + item.w / 2, item.y + item.h / 2);
+    ctx.restore();
+    if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
+    return;
+  }
+  if (item.type === "code") {
+    ctx.save();
+    ctx.fillStyle = "rgba(220,252,231,0.9)";
+    ctx.fillRect(item.x, item.y, item.w, item.h);
+    ctx.strokeStyle = "#16a34a"; ctx.lineWidth = 1.5 / zoom;
+    ctx.strokeRect(item.x, item.y, item.w, item.h);
+    ctx.fillStyle = "#16a34a";
+    ctx.font = `bold ${Math.min(14/zoom, item.h * 0.35)}px monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("</>", item.x + item.w / 2, item.y + item.h / 2);
+    ctx.restore();
+    if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
+    return;
+  }
   renderText(ctx, item as TextItem);
+}
+
+// ── LaTeX / Code overlay helpers ──────────────────────────────────────────────
+function FormulaRenderer({ latex, color, fontSize }: { latex: string; color: string; fontSize: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const w = window as unknown as { katex?: { render(l: string, e: HTMLElement, o: object): void } };
+    if (w.katex) {
+      try { w.katex.render(latex || "\\text{формула}", ref.current, { throwOnError: false, displayMode: true }); return; }
+      catch { /* fall through */ }
+    }
+    ref.current.textContent = latex || "формула";
+  }, [latex]);
+  return <div ref={ref} style={{ color, fontSize: fontSize + "px", padding: "8px 12px", width: "100%", overflowX: "auto" }} />;
+}
+function CodeRenderer({ content, language }: { content: string; language: string }) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.textContent = content;
+    const w = window as unknown as { hljs?: { highlightElement(e: HTMLElement): void } };
+    if (w.hljs) { try { w.hljs.highlightElement(ref.current); } catch { /* ignore */ } }
+  }, [content, language]);
+  return (
+    <pre style={{ margin: 0, width: "100%", height: "100%", overflow: "auto", background: "transparent" }}>
+      <code ref={ref} className={`language-${language}`} style={{ fontSize: 13, fontFamily: "monospace" }}>{content}</code>
+    </pre>
+  );
 }
 
 // ── RulingIcon ────────────────────────────────────────────────────────────────
@@ -1040,8 +1113,8 @@ function parseFormula(input: string): ((x: number) => number) | null {
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean }>(
-function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false }, ref) {
+const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean; subjectProfile?: string; boardBg?: string }>(
+function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false, subjectProfile, boardBg }, ref) {
 
   const containerRef    = useRef<HTMLDivElement>(null);
   const canvasRef       = useRef<HTMLCanvasElement>(null);
@@ -1065,11 +1138,12 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const livePathRef   = useRef<PathItem | null>(null);
   const remotePathsRef= useRef<Map<string, PathItem>>(new Map());
   const viewRef       = useRef({ zoom: 1, panX: 0, panY: 0 });
-  const rulingRef     = useRef<Ruling>("none");
+  const initRuling: Ruling = boardBg === "grid" ? "grid" : boardBg === "lines" ? "lines" : "none";
+  const rulingRef     = useRef<Ruling>(initRuling);
   const pdfPageRef    = useRef<number | null>(null); // null = no PDF active
 
   const [vpZoom,      setVpZoom]      = useState(100);
-  const [ruling,      setRulingUI]    = useState<Ruling>("none");
+  const [ruling,      setRulingUI]    = useState<Ruling>(initRuling);
   const [rulingSize,  setRulingSize]  = useState<RulingSize>("M");
   const rulingSizeRef = useRef<RulingSize>("M");
   const [connected,   setConnected]   = useState(false);
@@ -1078,7 +1152,21 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [snapGrid,    setSnapGrid]    = useState(false);
   const [fnFormula,   setFnFormula]   = useState("");
   const [fnError,     setFnError]     = useState(false);
-  const [showFnPanel, setShowFnPanel] = useState(false);
+  const [showFnPanel,      setShowFnPanel]      = useState(false);
+  const [showFormulaPanel, setShowFormulaPanel] = useState(false);
+  const [formulaInput,     setFormulaInput]     = useState("");
+  const [showCodePanel,    setShowCodePanel]    = useState(false);
+  const [codeInput,        setCodeInput]        = useState("");
+  const [codeLang,         setCodeLang]         = useState("python");
+  const showDotsRef = useRef(boardBg !== "blank");
+
+  const profileHide = useMemo(() => {
+    const p = subjectProfile ?? "other";
+    if (p === "english")  return new Set(["formula", "code"]);
+    if (p === "math" || p === "physics") return new Set(["card", "code"]);
+    if (p === "cs")       return new Set(["card", "formula"]);
+    return new Set<string>();
+  }, [subjectProfile]);
   const [isMobile,    setIsMobile]    = useState(false);
   // video sync
   const videosRef         = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -1280,14 +1368,14 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
     // Grid is drawn in physical pixels
-    if (rulingRef.current === "none") drawGrid(ctx, w, h, panX * dpr, panY * dpr, zoom * dpr);
+    if (rulingRef.current === "none" && showDotsRef.current) drawGrid(ctx, w, h, panX * dpr, panY * dpr, zoom * dpr);
     // World-space drawing: scale by dpr so 1 world unit = 1 CSS pixel
     ctx.save(); ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panX * dpr, panY * dpr);
     drawRuling(ctx, rulingRef.current, w / dpr, h / dpr, zoom, panX, panY, rulingSizeRef.current);
     if (pdfOffscreen.current) ctx.drawImage(pdfOffscreen.current, 0, 0);
     for (const item of itemsRef.current) {
       if (item.id === editingIdRef.current) continue;
-      const itemPage = item.pdfPage;
+      const itemPage = (item as { pdfPage?: number }).pdfPage;
       if (itemPage !== undefined && pdfPageRef.current !== null && itemPage !== pdfPageRef.current) continue;
       if (
         item.type === "frame" && item.private &&
@@ -2690,6 +2778,34 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     setFnFormula("");
   };
 
+  const addFormulaToBoard = () => {
+    const latex = formulaInput.trim(); if (!latex) return;
+    const { zoom, panX, panY } = viewRef.current;
+    const cont = containerRef.current;
+    const cw = cont?.clientWidth ?? 800, ch = cont?.clientHeight ?? 600;
+    const W = Math.round(Math.max(200, cw * 0.35 / zoom));
+    const H = Math.round(Math.max(80, ch * 0.12 / zoom));
+    const cx = (cw / 2 - panX) / zoom, cy = (ch / 2 - panY) / zoom;
+    const item: FormulaItem = { type: "formula", id: uid(), x: cx - W / 2, y: cy - H / 2, w: W, h: H, latex, color: "#1a1a1a", fontSize: 18 };
+    itemsRef.current.push(item); render();
+    send({ type: "path", item }); pushHistory({ type: "add", item });
+    setFormulaInput(""); setShowFormulaPanel(false); setPanVer(v => v + 1);
+  };
+
+  const addCodeToBoard = () => {
+    const content = codeInput.trim(); if (!content) return;
+    const { zoom, panX, panY } = viewRef.current;
+    const cont = containerRef.current;
+    const cw = cont?.clientWidth ?? 800, ch = cont?.clientHeight ?? 600;
+    const W = Math.round(Math.max(300, cw * 0.45 / zoom));
+    const H = Math.round(Math.max(150, ch * 0.3 / zoom));
+    const cx = (cw / 2 - panX) / zoom, cy = (ch / 2 - panY) / zoom;
+    const item: CodeItem = { type: "code", id: uid(), x: cx - W / 2, y: cy - H / 2, w: W, h: H, content, language: codeLang };
+    itemsRef.current.push(item); render();
+    send({ type: "path", item }); pushHistory({ type: "add", item });
+    setCodeInput(""); setShowCodePanel(false); setPanVer(v => v + 1);
+  };
+
   // ── eraser: removes paths/shapes that the cursor touches ──────────────────────
   const eraserActiveRef  = useRef(false);
   const eraserRadiusRef  = useRef(size * 2);
@@ -2822,6 +2938,30 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const [kbOffset, setKbOffset] = useState(0);
+
+  // ── load KaTeX + highlight.js once ───────────────────────────────────────────
+  useEffect(() => {
+    if (!document.querySelector('link[data-katex-css]')) {
+      const l = document.createElement("link"); l.rel = "stylesheet";
+      l.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
+      l.setAttribute("data-katex-css", "1"); document.head.appendChild(l);
+    }
+    if (!document.querySelector('script[data-katex]')) {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
+      s.setAttribute("data-katex", "1"); document.head.appendChild(s);
+    }
+    if (!document.querySelector('link[data-hljs-css]')) {
+      const l = document.createElement("link"); l.rel = "stylesheet";
+      l.href = "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css";
+      l.setAttribute("data-hljs-css", "1"); document.head.appendChild(l);
+    }
+    if (!document.querySelector('script[data-hljs]')) {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js";
+      s.setAttribute("data-hljs", "1"); document.head.appendChild(s);
+    }
+  }, []);
 
   // ── dice ─────────────────────────────────────────────────────────────────────
   const rollDice = () => {
@@ -3372,6 +3512,16 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         <SideBtn active={showEmojiPicker} onClick={()=>{setShowShapeMenu(false);setShowFrameMenu(false);setShowEmojiPicker(v=>!v);}} title="Эмодзи">
           <span className="text-base leading-none">😊</span>
         </SideBtn>
+        {!profileHide.has("formula") && (
+          <SideBtn active={showFormulaPanel} onClick={()=>{setShowFormulaPanel(v=>!v);setShowCodePanel(false);}} title="Формула LaTeX [∑]">
+            <span className="text-sm font-bold leading-none">∑</span>
+          </SideBtn>
+        )}
+        {!profileHide.has("code") && (
+          <SideBtn active={showCodePanel} onClick={()=>{setShowCodePanel(v=>!v);setShowFormulaPanel(false);}} title="Блок кода">
+            <span className="text-xs font-bold font-mono leading-none">{"</>"}</span>
+          </SideBtn>
+        )}
         <div className="flex-1"/>
         {/* More tools at bottom */}
         <div className="w-8 h-px mx-auto mb-1" style={{ background:"var(--brown-pale)" }}/>
@@ -3418,7 +3568,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   <span className="text-xl">🎡</span><span className="text-xs">Колесо</span>
                 </button>
                 {/* Vocab cards */}
-                {role==="tutor" && (
+                {role==="tutor" && !profileHide.has("card") && (
                   <button onClick={()=>{setShowVocabPanel(v=>!v);loadVocabTopics();setShowMoreTools(false);}}
                     onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
                     className="flex flex-col items-center gap-1 p-2 rounded-xl border hover:opacity-70"
@@ -3608,6 +3758,71 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                     {sz}
                   </button>
                 ))}
+              </div>
+            )}
+            {/* LaTeX формула */}
+            {!profileHide.has("formula") && (
+              <div className="relative">
+                <button onClick={() => { setShowFormulaPanel(p => !p); setShowCodePanel(false); }}
+                  title="Вставить формулу LaTeX"
+                  className="text-xs font-bold px-2 py-1 rounded-lg border-2"
+                  style={{ borderColor: showFormulaPanel?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", background: showFormulaPanel?"var(--brown-pale)":"white" }}>
+                  ∑
+                </button>
+                {showFormulaPanel && (
+                  <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-2"
+                    style={{ borderColor:"var(--brown-pale)", minWidth:320 }}>
+                    <div className="text-xs mb-1.5" style={{ color:"var(--brown-mid)" }}>LaTeX-формула. Например: \frac{"{a}{b}"}, x^2+y^2</div>
+                    <form className="flex items-center gap-1" onSubmit={e => { e.preventDefault(); addFormulaToBoard(); }}>
+                      <input value={formulaInput} onChange={e => setFormulaInput(e.target.value)}
+                        placeholder="\frac{a}{b}, \int_0^1 x\,dx" autoFocus autoComplete="off" spellCheck={false}
+                        className="text-sm font-mono px-2 py-1 rounded-lg border outline-none flex-1"
+                        style={{ borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                      <button type="submit" disabled={!formulaInput.trim()}
+                        className="text-sm px-3 py-1 rounded-lg font-medium shrink-0 disabled:opacity-40"
+                        style={{ background:"var(--gradient-primary)", color:"white" }}>
+                        Добавить
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Код */}
+            {!profileHide.has("code") && (
+              <div className="relative">
+                <button onClick={() => { setShowCodePanel(p => !p); setShowFormulaPanel(false); }}
+                  title="Вставить блок кода"
+                  className="text-xs font-bold px-2 py-1 rounded-lg border-2 font-mono"
+                  style={{ borderColor: showCodePanel?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", background: showCodePanel?"var(--brown-pale)":"white" }}>
+                  {"</>"}
+                </button>
+                {showCodePanel && (
+                  <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-2"
+                    style={{ borderColor:"var(--brown-pale)", minWidth:360 }}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xs" style={{ color:"var(--brown-mid)" }}>Язык:</span>
+                      {(["python","javascript","sql","cpp"] as const).map(l => (
+                        <button key={l} onClick={() => setCodeLang(l)}
+                          className="text-xs px-2 py-0.5 rounded border"
+                          style={{ borderColor: codeLang===l?"var(--brown-dark)":"var(--brown-pale)", fontWeight: codeLang===l?600:400, background: codeLang===l?"var(--brown-pale)":"transparent", color:"var(--brown-dark)" }}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <form onSubmit={e => { e.preventDefault(); addCodeToBoard(); }}>
+                      <textarea value={codeInput} onChange={e => setCodeInput(e.target.value)}
+                        placeholder="# код здесь" autoFocus rows={5} spellCheck={false}
+                        className="w-full text-xs font-mono px-2 py-1.5 rounded-lg border outline-none resize-none"
+                        style={{ borderColor:"var(--brown-pale)", background:"#f8fffe", color:"var(--brown-dark)" }}/>
+                      <button type="submit" disabled={!codeInput.trim()}
+                        className="mt-1 text-sm px-3 py-1 rounded-lg font-medium disabled:opacity-40"
+                        style={{ background:"var(--gradient-primary)", color:"white" }}>
+                        Добавить
+                      </button>
+                    </form>
+                  </div>
+                )}
               </div>
             )}
             {/* f(x) button — вставить график */}
@@ -3959,6 +4174,90 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   })}
                 </>
               )}
+            </div>
+          );
+        })}
+
+        {/* Formula overlays */}
+        {itemsRef.current.filter(it => it.type === "formula").map(it => {
+          const fi = it as FormulaItem;
+          const sp = w2s(fi.x, fi.y), ep = w2s(fi.x + fi.w, fi.y + fi.h);
+          const sw = ep.x - sp.x, sh = ep.y - sp.y;
+          const selected = selectedId === fi.id || selectedIds.has(fi.id);
+          const isDraggingThis = touchDragging && selectedId === fi.id;
+          return (
+            <div key={fi.id} className="absolute overflow-hidden"
+              style={{ left: sp.x, top: sp.y, width: sw, height: sh, zIndex: 20,
+                background: "rgba(237,233,254,0.95)", border: selected ? "2px solid #7c3aed" : "1.5px solid #c4b5fd",
+                borderRadius: 6, cursor: "grab", visibility: isDraggingThis ? "hidden" : undefined }}
+              onMouseDown={e => {
+                e.stopPropagation();
+                setSelectedId(fi.id); setSelectedIds(new Set([fi.id]));
+                if (!fi.locked) {
+                  const { cx, cy } = clientXY(e);
+                  const wp = s2w(cx, cy);
+                  selDragRef.current = { mode: "move", id: fi.id, wx0: wp.x, wy0: wp.y, origItem: { ...fi } };
+                }
+              }}>
+              <FormulaRenderer latex={fi.latex} color={fi.color} fontSize={fi.fontSize} />
+              {selected && !fi.locked && !touchDragging && (["nw","ne","sw","se"] as const).map(corner => {
+                const isRight = corner.endsWith("e"), isBottom = corner.startsWith("s");
+                return (
+                  <div key={corner} className="absolute pointer-events-auto"
+                    style={{ [isRight?"right":"left"]: -9, [isBottom?"bottom":"top"]: -9,
+                      width:18, height:18, cursor:`${corner}-resize`, zIndex:32,
+                      background:"white", border:"2px solid #7c3aed", borderRadius:3 }}
+                    onMouseDown={e => {
+                      e.stopPropagation();
+                      const r = containerRef.current!.getBoundingClientRect();
+                      const ww = (e.clientX - r.left - viewRef.current.panX) / viewRef.current.zoom;
+                      const wh = (e.clientY - r.top  - viewRef.current.panY) / viewRef.current.zoom;
+                      selDragRef.current = { mode:"resize-img", id: fi.id, corner, wx0: ww, wy0: wh, origItem: { ...fi } };
+                    }}/>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {/* Code overlays */}
+        {itemsRef.current.filter(it => it.type === "code").map(it => {
+          const ci = it as CodeItem;
+          const sp = w2s(ci.x, ci.y), ep = w2s(ci.x + ci.w, ci.y + ci.h);
+          const sw = ep.x - sp.x, sh = ep.y - sp.y;
+          const selected = selectedId === ci.id || selectedIds.has(ci.id);
+          const isDraggingThis = touchDragging && selectedId === ci.id;
+          return (
+            <div key={ci.id} className="absolute overflow-hidden"
+              style={{ left: sp.x, top: sp.y, width: sw, height: sh, zIndex: 20,
+                background: "rgba(220,252,231,0.97)", border: selected ? "2px solid #16a34a" : "1.5px solid #86efac",
+                borderRadius: 6, cursor: "grab", visibility: isDraggingThis ? "hidden" : undefined }}
+              onMouseDown={e => {
+                e.stopPropagation();
+                setSelectedId(ci.id); setSelectedIds(new Set([ci.id]));
+                if (!ci.locked) {
+                  const { cx, cy } = clientXY(e);
+                  const wp = s2w(cx, cy);
+                  selDragRef.current = { mode: "move", id: ci.id, wx0: wp.x, wy0: wp.y, origItem: { ...ci } };
+                }
+              }}>
+              <CodeRenderer content={ci.content} language={ci.language} />
+              {selected && !ci.locked && !touchDragging && (["nw","ne","sw","se"] as const).map(corner => {
+                const isRight = corner.endsWith("e"), isBottom = corner.startsWith("s");
+                return (
+                  <div key={corner} className="absolute pointer-events-auto"
+                    style={{ [isRight?"right":"left"]: -9, [isBottom?"bottom":"top"]: -9,
+                      width:18, height:18, cursor:`${corner}-resize`, zIndex:32,
+                      background:"white", border:"2px solid #16a34a", borderRadius:3 }}
+                    onMouseDown={e => {
+                      e.stopPropagation();
+                      const r = containerRef.current!.getBoundingClientRect();
+                      const ww = (e.clientX - r.left - viewRef.current.panX) / viewRef.current.zoom;
+                      const wh = (e.clientY - r.top  - viewRef.current.panY) / viewRef.current.zoom;
+                      selDragRef.current = { mode:"resize-img", id: ci.id, corner, wx0: ww, wy0: wh, origItem: { ...ci } };
+                    }}/>
+                );
+              })}
             </div>
           );
         })}
@@ -5115,6 +5414,60 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
           </div>
         )}
 
+        {/* Formula panel (mobile) */}
+        {showFormulaPanel && (
+          <div className="sm:hidden fixed inset-0 z-[250] flex items-end justify-center pb-4 px-4"
+            data-no-prevent style={{ background:"rgba(0,0,0,0.2)" }}
+            onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowFormulaPanel(false); }}>
+            <div className="w-full max-w-sm rounded-2xl border shadow-xl p-4"
+              style={{ background:"white", borderColor:"var(--brown-pale)" }}>
+              <div className="text-sm font-semibold mb-1" style={{ color:"var(--brown-dark)" }}>Формула LaTeX</div>
+              <div className="text-xs mb-3" style={{ color:"var(--brown-mid)" }}>Например: \frac{"{}{}"}a{"{}"}b, x^2, \int_0^1 x\,dx</div>
+              <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); addFormulaToBoard(); }}>
+                <input value={formulaInput} onChange={e => setFormulaInput(e.target.value)}
+                  placeholder="\frac{a}{b}" autoComplete="off" spellCheck={false} autoFocus
+                  className="text-sm font-mono px-3 py-2 rounded-xl border outline-none flex-1"
+                  style={{ borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                <button type="submit" disabled={!formulaInput.trim()}
+                  className="text-sm px-4 py-2 rounded-xl font-medium shrink-0 disabled:opacity-40"
+                  style={{ background:"var(--gradient-primary)", color:"white" }}>OK</button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Code panel (mobile) */}
+        {showCodePanel && (
+          <div className="sm:hidden fixed inset-0 z-[250] flex items-end justify-center pb-4 px-4"
+            data-no-prevent style={{ background:"rgba(0,0,0,0.2)" }}
+            onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+            onClick={e=>{ if(e.target===e.currentTarget) setShowCodePanel(false); }}>
+            <div className="w-full max-w-sm rounded-2xl border shadow-xl p-4"
+              style={{ background:"white", borderColor:"var(--brown-pale)" }}>
+              <div className="text-sm font-semibold mb-1" style={{ color:"var(--brown-dark)" }}>Блок кода</div>
+              <div className="flex gap-1.5 mb-2">
+                {(["python","javascript","sql","cpp"] as const).map(l => (
+                  <button key={l} onClick={() => setCodeLang(l)}
+                    className="text-xs px-2 py-1 rounded-lg border"
+                    style={{ borderColor: codeLang===l?"var(--brown-dark)":"var(--brown-pale)", fontWeight: codeLang===l?600:400, background: codeLang===l?"var(--brown-pale)":"transparent", color:"var(--brown-dark)" }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <form onSubmit={e => { e.preventDefault(); addCodeToBoard(); }}>
+                <textarea value={codeInput} onChange={e => setCodeInput(e.target.value)}
+                  placeholder="# код здесь" rows={6} spellCheck={false} autoFocus
+                  className="w-full text-xs font-mono px-3 py-2 rounded-xl border outline-none resize-none"
+                  style={{ borderColor:"var(--brown-pale)", background:"#f8fffe", color:"var(--brown-dark)" }}/>
+                <button type="submit" disabled={!codeInput.trim()}
+                  className="mt-2 text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-40"
+                  style={{ background:"var(--gradient-primary)", color:"white" }}>Добавить</button>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Wheel panel */}
         {showWheel && (
           <div className="fixed inset-0 z-[250] flex items-start justify-center pt-16 px-4"
@@ -5551,6 +5904,22 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
               style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
               <span className="text-sm font-bold font-mono leading-none mb-0.5">f(x)</span><span className="text-xs">График</span>
             </button>
+            {!profileHide.has("formula") && (
+              <button onClick={()=>{setShowFormulaPanel(v=>!v);setShowMoreTools(false);}}
+                onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
+                className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                <span className="text-base font-bold leading-none">∑</span><span className="text-xs">Формула</span>
+              </button>
+            )}
+            {!profileHide.has("code") && (
+              <button onClick={()=>{setShowCodePanel(v=>!v);setShowMoreTools(false);}}
+                onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}
+                className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                <span className="text-xs font-bold font-mono leading-none mb-0.5">{"</>"}</span><span className="text-xs">Код</span>
+              </button>
+            )}
             {role==="tutor" && (
               <button onClick={()=>{setShowTablePicker(v=>!v);setShowMoreTools(false);}}
                 onTouchEnd={e=>{e.preventDefault();e.stopPropagation();(e.currentTarget as HTMLButtonElement).click();}}

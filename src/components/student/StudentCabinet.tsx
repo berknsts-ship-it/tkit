@@ -80,6 +80,8 @@ interface Props {
   unreadNotifications?: UnreadNotif[];
   trainerDecks?: TrainerDeck[];
   meetingUrl?: string | null;
+  subjectProfile?: string;
+  boardBg?: string;
 }
 
 const TABS = [
@@ -92,7 +94,7 @@ const TABS = [
   { id: "reference", label: "Справочник", Icon: BookMarked    },
 ];
 
-export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [], meetingUrl }: Props) {
+export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [], meetingUrl, subjectProfile, boardBg }: Props) {
   const [tab,          setTab]          = useState("lessons");
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
   const canvasRef = useRef<WhiteboardRef>(null);
@@ -128,7 +130,7 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {tab === "board" && (
             <>
-              <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="student" materials={materials} />
+              <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="student" materials={materials} subjectProfile={subjectProfile} boardBg={boardBg} />
               <SyncedAudio roomId={studentId} role="student" />
               <SyncedVideo roomId={studentId} role="student" />
             </>
