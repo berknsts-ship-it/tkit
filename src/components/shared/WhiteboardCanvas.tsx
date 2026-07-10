@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
 import { flushSync, createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
-import { saveBoardState, loadBoardState, saveSnapshot } from "@/app/actions/board";
+import { saveBoardState, loadBoardState, saveSnapshot, getSnapshotItems, getPreparedTests } from "@/app/actions/board";
 import {
   Pencil, Eraser, Trash2, Type, Highlighter, MousePointer2,
   BookOpen, ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut,
@@ -143,6 +143,7 @@ type WsEvent =
   | { type: "privacy_mode"; enabled: boolean }
   | { type: "reveal_all" }
   | { type: "hide_all" }
+  | { type: "test_prep" }
   | { type: "test_start"; end_at: number; duration_minutes: number }
   | { type: "test_extend"; add_minutes: number }
   | { type: "test_end" }
@@ -1189,6 +1190,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const testIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const frozenStudentIdsRef = useRef(new Set<string>());
   const myFrozenRef         = useRef(false);
+  const [testPhase,    setTestPhase]    = useState<"prep" | "active" | null>(null);
+  const [testTimeUp,   setTestTimeUp]   = useState(false);
+  const [testNoFrame,  setTestNoFrame]  = useState(false);
+  const [testTab,      setTestTab]      = useState<"setup" | "saved">("setup");
+  const [savedTests,   setSavedTests]   = useState<{ id: string; title: string; created_at: string }[]>([]);
+  const [loadingTests, setLoadingTests] = useState(false);
+  const [testSaveName, setTestSaveName] = useState("");
+  const [showStartConfirm, setShowStartConfirm] = useState(false);
+  const testTimeUpRef = useRef(false);
 
   const profileHide = useMemo(() => {
     const p = subjectProfile ?? "other";
@@ -1862,10 +1872,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         setPrivacyMode(true);
         render(); return;
       }
+      if (payload.type === "test_prep") {
+        setTestMode(true);
+        setTestPhase("prep");
+        return;
+      }
       if (payload.type === "test_start") {
         testEndAtRef.current = payload.end_at;
+        testTimeUpRef.current = false;
         setTestMode(true);
+        setTestPhase("active");
         setTestFrozen(false);
+        setTestTimeUp(false);
         myFrozenRef.current = false;
         setMyFrozen(false);
         frozenStudentIdsRef.current = new Set();
@@ -1876,6 +1894,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       if (payload.type === "test_extend") {
         if (testEndAtRef.current) {
           testEndAtRef.current = testEndAtRef.current + payload.add_minutes * 60_000;
+          testTimeUpRef.current = false;
+          setTestTimeUp(false);
           setTestSecondsLeft(Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000)));
         }
         return;
@@ -2956,116 +2976,223 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   };
 
   // ── Test mode helpers ────────────────────────────────────────────────────────
+  const playTestBeep = () => {
+    try {
+      const ac = new AudioContext();
+      [880, 1100, 880].forEach((freq, i) => {
+        const osc = ac.createOscillator(), g = ac.createGain();
+        osc.connect(g); g.connect(ac.destination);
+        osc.frequency.value = freq; osc.type = "sine";
+        const t = ac.currentTime + i * 0.28;
+        g.gain.setValueAtTime(0.4, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        osc.start(t); osc.stop(t + 0.22);
+      });
+    } catch {}
+  };
+
   useEffect(() => {
-    if (!testMode || testFrozen) {
+    if (!testMode || testFrozen || testPhase !== "active") {
       if (testIntervalRef.current) { clearInterval(testIntervalRef.current); testIntervalRef.current = null; }
       return;
     }
     testIntervalRef.current = setInterval(() => {
       if (!testEndAtRef.current) return;
-      setTestSecondsLeft(Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000)));
+      const secs = Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000));
+      setTestSecondsLeft(secs);
+      if (secs === 0 && !testTimeUpRef.current) {
+        testTimeUpRef.current = true;
+        setTestTimeUp(true);
+        if (role === "tutor") playTestBeep();
+      }
     }, 500);
     return () => { if (testIntervalRef.current) { clearInterval(testIntervalRef.current); testIntervalRef.current = null; } };
-  }, [testMode, testFrozen]);
+  }, [testMode, testFrozen, testPhase, role]);
 
   const isGroupMode = students.length > 0;
 
-  const startTest = (durationMinutes: number) => {
+  // ── internal helpers ─────────────────────────────────────────────────────────
+  const _createTestFrames = (locked: boolean) => {
     const hasStudentFrames = itemsRef.current.some(it => it.type === "frame" && (it as FrameItem).ownerStudentId);
-    if (!hasStudentFrames) {
-      if (isGroupMode) {
-        // Group: create one frame per student, enable privacy
-        const cols = Math.min(students.length, 3);
-        const fw = 280, fh = 200, gap = 24;
-        const totalW = cols * fw + (cols - 1) * gap;
-        const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
-        const canvas = canvasRef.current;
-        const vw = (canvas?.offsetWidth ?? 800) / vz;
-        const vh = (canvas?.offsetHeight ?? 600) / vz;
-        const sx = -vpx / vz + (vw - totalW) / 2;
-        const sy = -vpy / vz + (vh - Math.ceil(students.length / cols) * (fh + gap)) / 2;
-        students.forEach((s, i) => {
-          const col = i % cols, row = Math.floor(i / cols);
-          const oc = FRAME_COLORS[i % FRAME_COLORS.length];
-          const item: FrameItem = {
-            type: "frame", id: uid(),
-            x: sx + col * (fw + gap), y: sy + row * (fh + gap),
-            w: fw, h: fh, shape: "rounded", title: s.name,
-            color: oc, bgColor: oc + "22",
-            ownerName: s.name, ownerColor: oc, ownerStudentId: s.id,
-            private: true, borderWidth: 2,
-          };
-          itemsRef.current.push(item);
-          send({ type: "path", item });
-        });
-        privacyModeRef.current = true;
-        setPrivacyMode(true);
-        send({ type: "privacy_mode", enabled: true });
-      } else {
-        // Individual: create one frame for the student, no privacy needed
-        const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
-        const canvas = canvasRef.current;
-        const vw = (canvas?.offsetWidth ?? 800) / vz;
-        const vh = (canvas?.offsetHeight ?? 600) / vz;
-        const fw = 320, fh = 240;
+    if (hasStudentFrames) return;
+    if (isGroupMode) {
+      const cols = Math.min(students.length, 3);
+      const fw = 280, fh = 200, gap = 24;
+      const totalW = cols * fw + (cols - 1) * gap;
+      const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
+      const canvas = canvasRef.current;
+      const vw = (canvas?.offsetWidth ?? 800) / vz;
+      const vh = (canvas?.offsetHeight ?? 600) / vz;
+      const sx = -vpx / vz + (vw - totalW) / 2;
+      const sy = -vpy / vz + (vh - Math.ceil(students.length / cols) * (fh + gap)) / 2;
+      students.forEach((s, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const oc = FRAME_COLORS[i % FRAME_COLORS.length];
         const item: FrameItem = {
           type: "frame", id: uid(),
-          x: -vpx / vz + (vw - fw) / 2,
-          y: -vpy / vz + (vh - fh) / 2 + 40,
-          w: fw, h: fh, shape: "rounded",
-          title: studentName ?? "Ученик",
-          color: FRAME_COLORS[0], bgColor: FRAME_COLORS[0] + "22",
-          ownerName: studentName ?? "Ученик",
-          ownerColor: FRAME_COLORS[0],
-          ownerStudentId: roomId,
-          private: false, borderWidth: 2,
+          x: sx + col * (fw + gap), y: sy + row * (fh + gap),
+          w: fw, h: fh, shape: "rounded", title: s.name,
+          color: oc, bgColor: oc + "22",
+          ownerName: s.name, ownerColor: oc, ownerStudentId: s.id,
+          private: true, borderWidth: 2, locked,
         };
         itemsRef.current.push(item);
         send({ type: "path", item });
-      }
+      });
+      privacyModeRef.current = true;
+      setPrivacyMode(true);
+      send({ type: "privacy_mode", enabled: true });
+    } else {
+      const { zoom: vz, panX: vpx, panY: vpy } = viewRef.current;
+      const canvas = canvasRef.current;
+      const vw = (canvas?.offsetWidth ?? 800) / vz;
+      const vh = (canvas?.offsetHeight ?? 600) / vz;
+      const fw = 320, fh = 240;
+      const item: FrameItem = {
+        type: "frame", id: uid(),
+        x: -vpx / vz + (vw - fw) / 2,
+        y: -vpy / vz + (vh - fh) / 2 + 40,
+        w: fw, h: fh, shape: "rounded",
+        title: studentName ?? "Ученик",
+        color: FRAME_COLORS[0], bgColor: FRAME_COLORS[0] + "22",
+        ownerName: studentName ?? "Ученик",
+        ownerColor: FRAME_COLORS[0],
+        ownerStudentId: roomId,
+        private: false, borderWidth: 2, locked,
+      };
+      itemsRef.current.push(item);
+      send({ type: "path", item });
     }
-    // Start timer
-    const endAt = Date.now() + durationMinutes * 60_000;
-    testEndAtRef.current = endAt;
-    setTestMode(true);
+  };
+
+  const _lockTestImages = () => {
+    itemsRef.current = itemsRef.current.map(it =>
+      it.type === "image" ? { ...it, locked: true } : it
+    ) as DrawItem[];
+    itemsRef.current.filter(it => it.type === "image").forEach(it => send({ type: "update", item: it }));
+  };
+
+  const _resetTestTimerState = () => {
+    testTimeUpRef.current = false;
+    setTestTimeUp(false);
     setTestFrozen(false);
     setMyFrozen(false);
     myFrozenRef.current = false;
     frozenStudentIdsRef.current = new Set();
     setFrozenStudentIds(new Set());
+  };
+
+  // Phase 1: create locked frames so tutor can annotate, students see empty frames
+  const prepareTest = () => {
+    if (!testNoFrame) _createTestFrames(true);
+    else _lockTestImages();
+    _resetTestTimerState();
+    setTestMode(true);
+    setTestPhase("prep");
+    render();
+    send({ type: "test_prep" });
+  };
+
+  // Phase 2: unlock frames + start timer (called from "Начать тест →" in toolbar)
+  const activateTest = (durationMinutes: number) => {
+    if (!testNoFrame) {
+      itemsRef.current = itemsRef.current.map(it =>
+        it.type === "frame" && (it as FrameItem).ownerStudentId ? { ...it, locked: false } : it
+      ) as DrawItem[];
+      itemsRef.current.filter(it => it.type === "frame" && (it as FrameItem).ownerStudentId)
+        .forEach(it => send({ type: "update", item: it }));
+    }
+    render();
+    const endAt = Date.now() + durationMinutes * 60_000;
+    testEndAtRef.current = endAt;
+    setTestPhase("active");
+    setTestSecondsLeft(durationMinutes * 60);
+    send({ type: "test_start", end_at: endAt, duration_minutes: durationMinutes });
+  };
+
+  // Immediate start (no prep phase) — old one-step behavior
+  const startTest = (durationMinutes: number) => {
+    if (!testNoFrame) _createTestFrames(false);
+    else _lockTestImages();
+    const endAt = Date.now() + durationMinutes * 60_000;
+    testEndAtRef.current = endAt;
+    _resetTestTimerState();
+    setTestMode(true);
+    setTestPhase("active");
     setTestSecondsLeft(durationMinutes * 60);
     send({ type: "test_start", end_at: endAt, duration_minutes: durationMinutes });
     render();
   };
 
+  const cancelTest = () => {
+    if (testNoFrame) {
+      itemsRef.current = itemsRef.current.map(it =>
+        it.type === "image" ? { ...it, locked: false } : it
+      ) as DrawItem[];
+      itemsRef.current.filter(it => it.type === "image").forEach(it => send({ type: "update", item: it }));
+    } else {
+      const toRemove = new Set(
+        itemsRef.current.filter(it => it.type === "frame" && (it as FrameItem).ownerStudentId).map(it => it.id)
+      );
+      if (toRemove.size > 0) {
+        itemsRef.current = itemsRef.current.filter(it => !toRemove.has(it.id)) as DrawItem[];
+        send({ type: "clear" });
+        itemsRef.current.forEach(it => send({ type: "path", item: it }));
+      }
+      if (isGroupMode) {
+        privacyModeRef.current = false;
+        setPrivacyMode(false);
+        send({ type: "reveal_all" });
+      }
+    }
+    setTestMode(false);
+    setTestPhase(null);
+    setTestFrozen(false);
+    setTestTimeUp(false);
+    testTimeUpRef.current = false;
+    render();
+  };
+
+  const exitTest = () => {
+    setTestMode(false);
+    setTestPhase(null);
+    setTestFrozen(false);
+    setTestTimeUp(false);
+    testTimeUpRef.current = false;
+    frozenStudentIdsRef.current = new Set();
+    setFrozenStudentIds(new Set());
+  };
+
   const extendTest = (addMinutes: number) => {
     if (!testEndAtRef.current) return;
     testEndAtRef.current += addMinutes * 60_000;
+    testTimeUpRef.current = false;
+    setTestTimeUp(false);
     setTestSecondsLeft(Math.max(0, Math.ceil((testEndAtRef.current - Date.now()) / 1000)));
     send({ type: "test_extend", add_minutes: addMinutes });
   };
 
   const endTest = async () => {
-    // Lock all student frames
-    itemsRef.current = itemsRef.current.map(it =>
-      it.type === "frame" && (it as FrameItem).ownerStudentId
-        ? { ...it, locked: true }
-        : it
-    ) as DrawItem[];
-    const allStudentIds = isGroupMode ? new Set(students.map(s => s.id)) : new Set([roomId]);
+    if (!testNoFrame) {
+      itemsRef.current = itemsRef.current.map(it =>
+        it.type === "frame" && (it as FrameItem).ownerStudentId ? { ...it, locked: true } : it
+      ) as DrawItem[];
+    }
+    const allStudentIds = testNoFrame ? new Set<string>()
+      : isGroupMode ? new Set(students.map(s => s.id))
+      : new Set([roomId]);
     frozenStudentIdsRef.current = allStudentIds;
     setFrozenStudentIds(new Set(allStudentIds));
     setTestFrozen(true);
     send({ type: "test_end" });
     render();
-    // Auto-save snapshot
     const dateStr = new Date().toLocaleDateString("ru", { day: "numeric", month: "long" });
     await saveSnapshot(
       roomId,
       `Тест ${dateStr}`,
       itemsRef.current as unknown[],
       undefined,
-      { testMode: true, testStatus: "completed", testDurationMinutes: testDurationInput, isGroup: students.length > 0 },
+      { testMode: true, testStatus: "completed", testDurationMinutes: testDurationInput, isGroup: isGroupMode },
     );
   };
 
@@ -3076,8 +3203,32 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       `Тест ${dateStr} (в процессе)`,
       itemsRef.current as unknown[],
       undefined,
-      { testMode: true, testStatus: "in_progress", testDurationMinutes: testDurationInput, isGroup: students.length > 0 },
+      { testMode: true, testStatus: "in_progress", testDurationMinutes: testDurationInput, isGroup: isGroupMode },
     );
+  };
+
+  const loadSavedTests = async () => {
+    setLoadingTests(true);
+    try { setSavedTests(await getPreparedTests()); } finally { setLoadingTests(false); }
+  };
+
+  const handleLoadTest = async (id: string) => {
+    const items = await getSnapshotItems(id) as DrawItem[];
+    pushHistory({ type: "clear", saved: [...itemsRef.current] });
+    itemsRef.current = items;
+    render();
+    send({ type: "clear" });
+    items.forEach(it => send({ type: "path", item: it }));
+    setShowTestSetup(false);
+  };
+
+  const handleSaveTest = async () => {
+    const title = testSaveName.trim();
+    if (!title) return;
+    await saveSnapshot(roomId, title, itemsRef.current as unknown[], undefined,
+      { testMode: true, testStatus: "prepared", isGroup: isGroupMode });
+    setTestSaveName("");
+    await loadSavedTests();
   };
 
   const unlockStudentFrame = (studentId: string) => {
@@ -4231,67 +4382,171 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                   </>
                 )}
 
-                {/* ── TEST MODE CONTROLS (individual + group) ──────────── */}
+                {/* ── TEST MODE CONTROLS ───────────────────────────────── */}
                 {role === "tutor" && (
                   <>
+                    {/* No test — setup popup */}
                     {!testMode && !testFrozen && (
                       <div className="relative">
                         <button
-                          onClick={() => setShowTestSetup(v => !v)}
-                          title="Режим теста — таймер, фрейм ученика, заморозка"
+                          onClick={() => { setShowTestSetup(v => !v); if (!showTestSetup && testTab === "saved") loadSavedTests(); }}
+                          title="Режим теста"
                           className="text-xs px-2 py-1 rounded-lg font-medium border"
                           style={{ borderColor: showTestSetup ? "var(--brown-dark)" : "#8060d0", color: "#8060d0", background: showTestSetup ? "#f0ecff" : "transparent" }}>
                           ⏱ Тест
                         </button>
                         {showTestSetup && (
-                          <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-3"
-                            style={{ borderColor:"var(--brown-pale)", minWidth: 220 }}>
-                            <div className="text-xs font-semibold mb-2" style={{ color:"var(--brown-dark)" }}>Режим теста</div>
-                            <div className="text-xs mb-3" style={{ color:"var(--brown-mid)" }}>
-                              {isGroupMode
-                                ? "Создаст фреймы учеников, включит приватный режим и запустит таймер."
-                                : "Создаст фрейм для ученика и запустит таймер."}
+                          <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg"
+                            style={{ borderColor:"var(--brown-pale)", minWidth: 240 }}>
+                            {/* Tabs */}
+                            <div style={{ display:"flex", borderBottom:"1px solid var(--brown-pale)" }}>
+                              {(["setup","saved"] as const).map(tab => (
+                                <button key={tab}
+                                  onClick={() => { setTestTab(tab); if (tab === "saved" && savedTests.length === 0) loadSavedTests(); }}
+                                  className="flex-1 text-xs py-2 font-medium"
+                                  style={{ color: testTab === tab ? "#8060d0" : "var(--brown-mid)", borderBottom: testTab === tab ? "2px solid #8060d0" : "2px solid transparent", background:"transparent" }}>
+                                  {tab === "setup" ? "Настройка" : "Мои тесты"}
+                                </button>
+                              ))}
                             </div>
-                            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                              <span className="text-xs" style={{ color:"var(--brown-mid)", flexShrink:0 }}>Время (мин):</span>
-                              <input type="number" min={1} max={180} value={testDurationInput}
-                                onChange={e => setTestDurationInput(Math.max(1, parseInt(e.target.value) || 20))}
-                                className="text-sm rounded-lg border outline-none"
-                                style={{ width:60, padding:"4px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
-                            </div>
-                            <button
-                              onClick={() => { setShowTestSetup(false); startTest(testDurationInput); }}
-                              className="w-full text-sm rounded-lg font-semibold text-white"
-                              style={{ padding:"7px 0", background:"#8060d0" }}>
-                              Начать тест
-                            </button>
+
+                            {testTab === "setup" && (
+                              <div style={{ padding:"12px" }}>
+                                {/* Mode toggle */}
+                                <div className="text-xs font-semibold mb-2" style={{ color:"var(--brown-dark)" }}>Режим</div>
+                                <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+                                  {([["frame","С фреймом"],["noframe","Без фрейма"]] as const).map(([val, label]) => (
+                                    <button key={val}
+                                      onClick={() => setTestNoFrame(val === "noframe")}
+                                      className="flex-1 text-xs py-1.5 rounded-lg font-medium border"
+                                      style={{ borderColor: (val === "noframe") === testNoFrame ? "#8060d0" : "var(--brown-pale)", color: (val === "noframe") === testNoFrame ? "#8060d0" : "var(--brown-mid)", background: (val === "noframe") === testNoFrame ? "#f0ecff" : "transparent" }}>
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                {/* Buttons */}
+                                <button
+                                  onClick={() => { setShowTestSetup(false); prepareTest(); }}
+                                  className="w-full text-xs rounded-lg font-semibold border mb-2"
+                                  style={{ padding:"6px 0", borderColor:"#8060d0", color:"#8060d0", background:"transparent" }}>
+                                  Подготовить →
+                                </button>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                                  <span className="text-xs" style={{ color:"var(--brown-mid)", flexShrink:0 }}>Время (мин):</span>
+                                  <input type="number" min={1} max={180} value={testDurationInput}
+                                    onChange={e => setTestDurationInput(Math.max(1, parseInt(e.target.value) || 20))}
+                                    className="text-sm rounded-lg border outline-none"
+                                    style={{ width:60, padding:"4px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                                </div>
+                                <button
+                                  onClick={() => { setShowTestSetup(false); startTest(testDurationInput); }}
+                                  className="w-full text-sm rounded-lg font-semibold text-white"
+                                  style={{ padding:"7px 0", background:"#8060d0" }}>
+                                  Начать сразу
+                                </button>
+                              </div>
+                            )}
+
+                            {testTab === "saved" && (
+                              <div style={{ padding:"12px" }}>
+                                {loadingTests ? (
+                                  <div className="text-xs text-center py-4" style={{ color:"var(--brown-mid)" }}>Загрузка...</div>
+                                ) : savedTests.length === 0 ? (
+                                  <div className="text-xs text-center py-4" style={{ color:"var(--brown-mid)" }}>Нет сохранённых тестов</div>
+                                ) : (
+                                  <div style={{ maxHeight:160, overflowY:"auto", marginBottom:10 }}>
+                                    {savedTests.map(t => (
+                                      <div key={t.id} style={{ display:"flex", alignItems:"center", gap:6, paddingBottom:6, borderBottom:"1px solid var(--brown-pale)", marginBottom:6 }}>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-xs font-medium truncate" style={{ color:"var(--brown-dark)" }}>{t.title}</div>
+                                          <div className="text-xs" style={{ color:"var(--brown-mid)" }}>{new Date(t.created_at).toLocaleDateString("ru", { day:"numeric", month:"short" })}</div>
+                                        </div>
+                                        <button onClick={() => handleLoadTest(t.id)}
+                                          className="text-xs px-2 py-0.5 rounded border font-medium flex-shrink-0"
+                                          style={{ borderColor:"#8060d0", color:"#8060d0", background:"transparent" }}>
+                                          Загрузить
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="text-xs font-semibold mb-1.5" style={{ color:"var(--brown-dark)" }}>Сохранить текущую доску как тест:</div>
+                                <div style={{ display:"flex", gap:6 }}>
+                                  <input value={testSaveName} onChange={e => setTestSaveName(e.target.value)}
+                                    placeholder="Название теста..."
+                                    className="flex-1 text-xs rounded-lg border outline-none"
+                                    style={{ padding:"5px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                                  <button onClick={handleSaveTest} disabled={!testSaveName.trim()}
+                                    className="text-xs px-2.5 py-1 rounded-lg font-medium text-white disabled:opacity-40"
+                                    style={{ background:"#8060d0", border:"none" }}>
+                                    Сохранить
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
 
-                    {testMode && !testFrozen && (
+                    {/* Prep phase — "Начать тест →" */}
+                    {testMode && testPhase === "prep" && !testFrozen && (
+                      <>
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowStartConfirm(v => !v)}
+                            title="Запустить таймер и разблокировать фреймы учеников"
+                            className="text-xs px-2 py-1 rounded-lg font-semibold border"
+                            style={{ borderColor:"#8060d0", color:"white", background:"#8060d0" }}>
+                            Начать тест →
+                          </button>
+                          {showStartConfirm && (
+                            <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-3"
+                              style={{ borderColor:"var(--brown-pale)", minWidth:200 }}>
+                              <div className="text-xs font-semibold mb-2" style={{ color:"var(--brown-dark)" }}>Время теста</div>
+                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                                <span className="text-xs" style={{ color:"var(--brown-mid)", flexShrink:0 }}>Минут:</span>
+                                <input type="number" min={1} max={180} value={testDurationInput}
+                                  onChange={e => setTestDurationInput(Math.max(1, parseInt(e.target.value) || 20))}
+                                  className="text-sm rounded-lg border outline-none"
+                                  style={{ width:60, padding:"4px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                              </div>
+                              <button
+                                onClick={() => { setShowStartConfirm(false); activateTest(testDurationInput); }}
+                                className="w-full text-sm rounded-lg font-semibold text-white"
+                                style={{ padding:"7px 0", background:"#8060d0" }}>
+                                Запустить →
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={cancelTest}
+                          className="text-xs px-2 py-1 rounded-lg border font-medium"
+                          style={{ borderColor:"var(--brown-pale)", color:"var(--brown-mid)", background:"transparent" }}>
+                          Отменить
+                        </button>
+                      </>
+                    )}
+
+                    {/* Active phase — timer controls */}
+                    {testMode && testPhase === "active" && !testFrozen && (
                       <>
                         <button onClick={() => extendTest(5)}
-                          title="Добавить 5 минут"
                           className="text-xs px-2 py-1 rounded-lg border font-medium"
                           style={{ borderColor:"#8060d0", color:"#8060d0", background:"transparent" }}>
                           +5 мин
                         </button>
                         <button onClick={() => extendTest(10)}
-                          title="Добавить 10 минут"
                           className="text-xs px-2 py-1 rounded-lg border font-medium"
                           style={{ borderColor:"#8060d0", color:"#8060d0", background:"transparent" }}>
                           +10 мин
                         </button>
                         <button onClick={() => saveTestProgress()}
-                          title="Сохранить прогресс теста и продолжить позже"
                           className="text-xs px-2 py-1 rounded-lg border font-medium"
                           style={{ borderColor:"var(--brown-pale)", color:"var(--brown-mid)", background:"transparent" }}>
                           Сохранить
                         </button>
                         <button onClick={endTest}
-                          title="Завершить тест — заморозить фреймы и сохранить снапшот"
                           className="text-xs px-2 py-1 rounded-lg font-semibold"
                           style={{ background:"#c03030", color:"white", border:"none" }}>
                           Завершить тест
@@ -4299,14 +4554,14 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                       </>
                     )}
 
+                    {/* Frozen — unlock per student */}
                     {testFrozen && (
                       <>
-                        {isGroupMode
+                        {!testNoFrame && (isGroupMode
                           ? students.map(s => (
                             <button key={s.id}
                               onClick={() => unlockStudentFrame(s.id)}
                               disabled={!frozenStudentIds.has(s.id)}
-                              title={`Разморозить фрейм ${s.name}`}
                               className="text-xs px-2 py-1 rounded-lg border font-medium disabled:opacity-30"
                               style={{ borderColor:"#20a060", color:"#20a060", background:"transparent" }}>
                               ▶ {s.name}
@@ -4316,20 +4571,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                             <button
                               onClick={() => unlockStudentFrame(roomId)}
                               disabled={!frozenStudentIds.has(roomId)}
-                              title={`Разморозить фрейм ${studentName ?? "ученика"}`}
                               className="text-xs px-2 py-1 rounded-lg border font-medium disabled:opacity-30"
                               style={{ borderColor:"#20a060", color:"#20a060", background:"transparent" }}>
                               ▶ {studentName ?? "Ученик"}
                             </button>
                           )
-                        }
-                        <button
-                          onClick={() => {
-                            setTestMode(false); setTestFrozen(false);
-                            frozenStudentIdsRef.current = new Set();
-                            setFrozenStudentIds(new Set());
-                          }}
-                          title="Закрыть режим теста"
+                        )}
+                        <button onClick={exitTest}
                           className="text-xs px-2 py-1 rounded-lg border font-medium"
                           style={{ borderColor:"var(--brown-pale)", color:"var(--brown-mid)", background:"transparent" }}>
                           × Закрыть
@@ -4391,19 +4639,27 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         {testMode && (
           <div style={{
             position: "absolute", top: 10, right: 10, zIndex: 30,
-            background: testSecondsLeft <= 0 ? "#c03030" : testSecondsLeft <= 60 ? "#d06000" : "rgba(30,30,30,0.82)",
-            color: "white",
-            borderRadius: 10,
-            padding: "6px 12px",
+            background: testFrozen ? "rgba(30,30,30,0.82)"
+              : testTimeUp ? "#c03030"
+              : testPhase === "prep" ? "#6040b0"
+              : testSecondsLeft <= 60 ? "#d06000"
+              : "rgba(30,30,30,0.82)",
+            color: "white", borderRadius: 10, padding: "6px 12px",
             display: "flex", flexDirection: "column", alignItems: "center",
-            animation: testSecondsLeft <= 0 ? "testblink 1s step-end infinite" : undefined,
+            animation: testTimeUp && !testFrozen ? "testblink 1s step-end infinite" : undefined,
             minWidth: 72, pointerEvents: "none",
           }}>
-            <span style={{ fontSize: 11, opacity: 0.8, letterSpacing: 1, textTransform: "uppercase" }}>Тест</span>
-            <span style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
-              {String(Math.floor(Math.max(0, testSecondsLeft) / 60)).padStart(2, "0")}:{String(Math.max(0, testSecondsLeft) % 60).padStart(2, "0")}
+            <span style={{ fontSize: 11, opacity: 0.8, letterSpacing: 1, textTransform: "uppercase" }}>
+              {testFrozen ? "завершён" : testPhase === "prep" ? "подготовка" : "тест"}
             </span>
-            {testFrozen && <span style={{ fontSize: 10, opacity: 0.85, marginTop: 2 }}>завершён</span>}
+            {testPhase === "active" && (
+              <span style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
+                {String(Math.floor(Math.max(0, testSecondsLeft) / 60)).padStart(2, "0")}:{String(Math.max(0, testSecondsLeft) % 60).padStart(2, "0")}
+              </span>
+            )}
+            {testTimeUp && !testFrozen && (
+              <span style={{ fontSize: 11, fontWeight: 600, marginTop: 2 }}>Время вышло</span>
+            )}
           </div>
         )}
 

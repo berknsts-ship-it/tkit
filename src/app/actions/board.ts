@@ -60,6 +60,20 @@ export async function getSnapshots(studentId: string) {
   return data ?? [];
 }
 
+export async function getPreparedTests() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data } = await supabase
+    .from("board_snapshots")
+    .select("id, title, created_at")
+    .eq("tutor_id", user.id)
+    .eq("test_status", "prepared")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  return (data ?? []) as { id: string; title: string; created_at: string }[];
+}
+
 export async function getSnapshotItems(id: string) {
   const supabase = await createClient();
   const { data } = await supabase
