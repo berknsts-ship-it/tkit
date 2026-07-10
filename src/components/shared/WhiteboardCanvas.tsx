@@ -458,6 +458,19 @@ function shiftItem(item: DrawItem, dx: number, dy: number): DrawItem {
   return { ...ti, x: ti.x + dx, y: ti.y + dy };
 }
 
+function collectFrameChildren(frame: FrameItem, items: DrawItem[]): Map<string, DrawItem> {
+  const { x, y, w, h } = frame;
+  const map = new Map<string, DrawItem>();
+  for (const it of items) {
+    if (it.id === frame.id || it.type === "frame") continue;
+    const b = itemBounds(it);
+    const cx = (b.x0 + b.x1) / 2;
+    const cy = (b.y0 + b.y1) / 2;
+    if (cx >= x && cx <= x + w && cy >= y && cy <= y + h) map.set(it.id, { ...it });
+  }
+  return map;
+}
+
 // ── canvas drawing ────────────────────────────────────────────────────────────
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, panX: number, panY: number, zoom: number) {
   const STEP = 40, step = STEP * zoom;
@@ -1224,7 +1237,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     } else { selectedIdsRef.current = v; setSelectedIds_(v); }
   };
   const [,            setPanVer]       = useState(0);
-  type SelDrag = { mode: "move";   id: string; wx0: number; wy0: number; origItem: DrawItem }
+  type SelDrag = { mode: "move";   id: string; wx0: number; wy0: number; origItem: DrawItem; frameChildren?: Map<string, DrawItem> }
               | { mode: "resize"; id: string; wx0: number; wy0: number; origItem: DrawItem; origFontSize: number; origDiag: number }
               | { mode: "resize-img"; id: string; corner: "se"|"sw"|"ne"|"nw"; wx0: number; wy0: number; origItem: DrawItem }
               | { mode: "resize-frame"; id: string; corner: "se"|"sw"|"ne"|"nw"; wx0: number; wy0: number; origItem: DrawItem };
@@ -2053,7 +2066,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
           // Single select
           setSelectedId(hit.id);
           setSelectedIds(new Set([hit.id]));
-          selDragRef.current = { mode:"move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit } };
+          selDragRef.current = {
+            mode:"move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit },
+            ...(hit.type === "frame" ? { frameChildren: collectFrameChildren(hit as FrameItem, itemsRef.current) } : {}),
+          };
         }
       } else {
         // Start rubber-band box selection
@@ -2155,7 +2171,14 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       const idx = itemsRef.current.findIndex(i => i.id === drag.id);
       if (idx < 0) return;
       if (drag.mode === "move") {
-        itemsRef.current[idx] = shiftItem(drag.origItem, w.x - drag.wx0, w.y - drag.wy0);
+        const ddx = w.x - drag.wx0, ddy = w.y - drag.wy0;
+        itemsRef.current[idx] = shiftItem(drag.origItem, ddx, ddy);
+        if (drag.frameChildren) {
+          for (const [cid, orig] of drag.frameChildren) {
+            const ci = itemsRef.current.findIndex(i => i.id === cid);
+            if (ci >= 0) itemsRef.current[ci] = shiftItem(orig, ddx, ddy);
+          }
+        }
       } else if (drag.mode === "resize-img" || drag.mode === "resize-frame") {
         const orig = drag.origItem as ImageItem | FrameItem | VideoItem | FunctionItem;
         const dx = w.x - drag.wx0, dy = w.y - drag.wy0;
@@ -2266,6 +2289,13 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         if (JSON.stringify(drag.origItem) !== JSON.stringify(next)) {
           pushHistory({ type:"update", idx, prev: drag.origItem, next: { ...next } });
           send({ type:"update", item: next });
+          // sync children that moved with the frame
+          if (drag.mode === "move" && drag.frameChildren) {
+            for (const [cid] of drag.frameChildren) {
+              const child = itemsRef.current.find(i => i.id === cid);
+              if (child) send({ type:"update", item: child });
+            }
+          }
         } else if (drag.mode === "move" && drag.origItem.type === "card") {
           const { cx, cy } = clientXY(e);
           const wp = s2w(cx, cy);
@@ -2364,7 +2394,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         } else {
           setSelectedId(hit.id);
           setSelectedIds(new Set([hit.id]));
-          selDragRef.current = { mode: "move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit } };
+          selDragRef.current = {
+            mode: "move", id: hit.id, wx0: w.x, wy0: w.y, origItem: { ...hit },
+            ...(hit.type === "frame" ? { frameChildren: collectFrameChildren(hit as FrameItem, itemsRef.current) } : {}),
+          };
           flushSync(() => setTouchDragging(true));
         }
         return;
