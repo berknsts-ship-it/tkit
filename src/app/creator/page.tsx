@@ -29,7 +29,7 @@ export default async function CreatorPage() {
     admin.from("students").select("*", { count: "exact", head: true }),
     admin.from("lessons").select("*", { count: "exact", head: true }),
     listBetaCodes(),
-    admin.from("support_messages").select("id, email, message, created_at, replied_at").order("created_at", { ascending: false }),
+    admin.from("support_messages").select("id, email, message, created_at, replied_at, screenshots").order("created_at", { ascending: false }),
   ]);
 
   return (
