@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { markSupportReplied, unmarkSupportReplied, replySupportMessage } from "@/app/actions/support";
+import { markSupportReplied, unmarkSupportReplied } from "@/app/actions/support";
 
 type Message = {
   id: string;
@@ -17,8 +17,6 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
   const [localUnreplied, setLocalUnreplied] = useState<Set<string>>(new Set());
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   if (messages.length === 0) {
@@ -28,22 +26,23 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
   const openReply = (id: string) => {
     setReplyOpen(id);
     setReplyText("");
-    setSendError(null);
   };
 
-  const handleSendReply = async (msg: Message) => {
+  // Open mailto with pre-filled reply, then mark as replied in DB
+  const handleSendReply = (msg: Message) => {
     if (!msg.email || !replyText.trim()) return;
-    setSending(true);
-    setSendError(null);
-    const result = await replySupportMessage(msg.id, msg.email, replyText.trim(), msg.message);
-    setSending(false);
-    if (result?.error) {
-      setSendError(result.error);
-    } else {
-      setLocalReplied(prev => new Set(prev).add(msg.id));
-      setReplyOpen(null);
-      setReplyText("");
-    }
+    const subject = encodeURIComponent("Ответ от поддержки T-Kit");
+    const body = encodeURIComponent(
+      replyText.trim() + "\n\n---\nВаш вопрос:\n> " + msg.message
+    );
+    window.open(`mailto:${msg.email}?subject=${subject}&body=${body}`, "_blank");
+    // Mark replied in DB
+    startTransition(async () => {
+      await markSupportReplied(msg.id);
+    });
+    setLocalReplied(prev => new Set(prev).add(msg.id));
+    setReplyOpen(null);
+    setReplyText("");
   };
 
   const handleUnmark = (id: string) => {
@@ -51,13 +50,6 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
     startTransition(async () => {
       await unmarkSupportReplied(id);
     });
-  };
-
-  const handleMarkManual = (id: string, email: string, message: string) => {
-    // Fallback for no-email messages: open mailto + mark
-    const subject = encodeURIComponent("Ответ от поддержки T-Kit");
-    const body = encodeURIComponent(`> ${message}\n\n`);
-    window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_blank");
   };
 
   return (
@@ -95,7 +87,7 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
               </div>
 
               <div className="flex flex-col gap-1.5 shrink-0">
-                {!isReplied && msg.email && (
+                {msg.email && !isReplied && (
                   <button
                     onClick={() => isOpen ? setReplyOpen(null) : openReply(msg.id)}
                     className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
@@ -104,8 +96,7 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
                   </button>
                 )}
                 {isReplied && (
-                  <button
-                    onClick={() => handleUnmark(msg.id)}
+                  <button onClick={() => handleUnmark(msg.id)}
                     className="text-xs px-2 py-1 rounded-lg border"
                     style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
                     ↩ Сбросить
@@ -114,36 +105,34 @@ export default function SupportInbox({ messages }: { messages: Message[] }) {
               </div>
             </div>
 
-            {/* Inline reply form */}
+            {/* Inline reply composer */}
             {isOpen && msg.email && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--brown-pale)" }}>
                 <div className="text-xs mb-1.5" style={{ color: "var(--brown-mid)" }}>
                   Кому: <strong>{msg.email}</strong>
+                  <span style={{ color: "var(--brown-light)", marginLeft: 6 }}>— откроется в вашем почтовом клиенте</span>
                 </div>
                 <textarea
                   value={replyText}
                   onChange={e => setReplyText(e.target.value)}
                   placeholder="Введите ответ..."
                   rows={4}
+                  autoFocus
                   className="w-full text-sm rounded-lg border outline-none resize-none"
                   style={{ padding: "8px 10px", borderColor: "var(--brown-pale)", background: "#fdf8f0", color: "var(--brown-dark)" }}
                 />
-                {sendError && (
-                  <p className="text-xs mt-1" style={{ color: "#c03030" }}>{sendError}</p>
-                )}
                 <div className="flex justify-end gap-2 mt-2">
-                  <button
-                    onClick={() => { setReplyOpen(null); setReplyText(""); setSendError(null); }}
+                  <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
                     className="text-xs px-3 py-1.5 rounded-lg border"
                     style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)", background: "transparent" }}>
                     Отмена
                   </button>
                   <button
                     onClick={() => handleSendReply(msg)}
-                    disabled={!replyText.trim() || sending}
+                    disabled={!replyText.trim()}
                     className="text-xs px-4 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
                     style={{ background: "var(--gradient-primary)", border: "none" }}>
-                    {sending ? "Отправка..." : "Отправить письмо"}
+                    Открыть в почте →
                   </button>
                 </div>
               </div>
