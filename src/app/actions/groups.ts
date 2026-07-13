@@ -65,6 +65,9 @@ export async function removeGroupMember(groupId: string, studentId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Не авторизован" };
+  const { data: group } = await supabase
+    .from("groups").select("id").eq("id", groupId).eq("tutor_id", user.id).single();
+  if (!group) return { error: "Группа не найдена" };
   await supabase.from("group_members")
     .delete().eq("group_id", groupId).eq("student_id", studentId);
   revalidatePath(`/tutor/groups/${groupId}`);
@@ -85,6 +88,11 @@ export async function createGroupHomework(formData: FormData) {
   if (!title) redirect("/tutor/homework/new");
 
   if (group_id) {
+    // Verify tutor owns this group
+    const { data: group } = await supabase
+      .from("groups").select("id").eq("id", group_id).eq("tutor_id", user.id).single();
+    if (!group) redirect("/tutor/homework/new");
+
     // Get all members of the group
     const admin = createAdminClient();
     const { data: members } = await admin

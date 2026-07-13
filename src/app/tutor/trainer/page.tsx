@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
+import { getTutorPlan } from "@/lib/subscription";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Dumbbell, Users, BookOpen } from "lucide-react";
@@ -9,6 +10,8 @@ export default async function TrainerPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+  const plan = await getTutorPlan();
+  if (plan !== "pro") redirect("/tutor/dashboard?upgrade=trainer");
   const tutorId = await getEffectiveTutorId(user);
   const db = createAdminClient();
 

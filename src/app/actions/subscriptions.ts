@@ -38,13 +38,17 @@ export async function renewSubscription(subscriptionId: string, studentId: strin
   if (!addAmount || addAmount <= 0) return { error: "Введите сумму пополнения" };
 
   const db = createAdminClient();
-  const { data: sub } = await db.from("subscriptions").select("total_amount, balance").eq("id", subscriptionId).single();
+  const { data: sub } = await db.from("subscriptions")
+    .select("total_amount, balance")
+    .eq("id", subscriptionId)
+    .eq("tutor_id", user.id)
+    .single();
   if (!sub) return { error: "Абонемент не найден" };
 
   const { error } = await db.from("subscriptions").update({
     total_amount: sub.total_amount + addAmount,
     balance:      sub.balance + addAmount,
-  }).eq("id", subscriptionId);
+  }).eq("id", subscriptionId).eq("tutor_id", user.id);
 
   if (error) return { error: error.message };
   revalidatePath(`/tutor/students/${studentId}`);

@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
+import { getTutorPlan } from "@/lib/subscription";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { deleteArticle } from "@/app/actions/reference";
 
 export default async function ReferencePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
+  const plan = await getTutorPlan();
+  if (plan !== "pro") redirect("/tutor/dashboard?upgrade=reference");
   const tutorId = await getEffectiveTutorId(user!);
   const db = createAdminClient();
 

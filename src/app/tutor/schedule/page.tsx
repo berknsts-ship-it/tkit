@@ -21,9 +21,13 @@ export default async function SchedulePage({
   const tutorId = await getEffectiveTutorId(user);
   const db = createAdminClient();
 
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
   const [{ data: lessons }, { data: students }, { data: subscriptions }, { data: groups }] = await Promise.all([
     db.from("lessons").select("*, students(name), groups(name)")
       .eq("tutor_id", tutorId)
+      .gte("scheduled_at", sixMonthsAgo.toISOString())
       .order("scheduled_at"),
     db.from("students").select("id, name, default_price_rub").eq("tutor_id", tutorId).order("name"),
     db.from("subscriptions").select("id, student_id, balance, name").eq("tutor_id", tutorId).eq("status", "active"),

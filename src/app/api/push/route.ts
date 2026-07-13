@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   const { studentId, subscription } = await req.json();
   if (!studentId || !subscription?.endpoint) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
+  }
+
+  // If there's an authenticated session, verify ownership
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { data: student } = await supabase
+      .from("students").select("id").eq("id", studentId).eq("tutor_id", user.id).single();
+    if (!student) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const db = createAdminClient();
@@ -21,6 +31,14 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const { studentId, endpoint } = await req.json();
   if (!studentId || !endpoint) return NextResponse.json({ error: "invalid" }, { status: 400 });
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { data: student } = await supabase
+      .from("students").select("id").eq("id", studentId).eq("tutor_id", user.id).single();
+    if (!student) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const db = createAdminClient();
   await db.from("push_subscriptions").delete()

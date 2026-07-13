@@ -16,7 +16,7 @@ export async function saveSnapshot(
   if (!user) return { error: "Unauthorized" };
 
   const isGroup = testOpts?.isGroup ?? false;
-  await supabase.from("board_snapshots").insert({
+  const { error } = await supabase.from("board_snapshots").insert({
     tutor_id:   user.id,
     student_id: isGroup ? null : roomId,
     group_id:   isGroup ? roomId : null,
@@ -27,6 +27,7 @@ export async function saveSnapshot(
     test_status:            testOpts?.testStatus ?? null,
     test_duration_minutes:  testOpts?.testDurationMinutes ?? null,
   });
+  if (error) return { error: "Не удалось сохранить конспект" };
   revalidatePath("/tutor/board");
 }
 
@@ -35,10 +36,11 @@ export async function updateSnapshot(id: string, items: unknown[]) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  await supabase.from("board_snapshots")
+  const { error } = await supabase.from("board_snapshots")
     .update({ items, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("tutor_id", user.id);
+  if (error) return { error: "Не удалось обновить конспект" };
 }
 
 export async function deleteSnapshot(id: string) {
@@ -46,7 +48,8 @@ export async function deleteSnapshot(id: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  await supabase.from("board_snapshots").delete().eq("id", id).eq("tutor_id", user.id);
+  const { error } = await supabase.from("board_snapshots").delete().eq("id", id).eq("tutor_id", user.id);
+  if (error) return { error: "Не удалось удалить конспект" };
 }
 
 export async function getSnapshots(studentId: string) {
@@ -87,11 +90,20 @@ export async function getSnapshotItems(id: string) {
 export async function renameSnapshot(id: string, title: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase.from("board_snapshots").update({ title }).eq("id", id).eq("tutor_id", user.id);
+  if (!user) return { error: "Unauthorized" };
+  const { error } = await supabase.from("board_snapshots").update({ title }).eq("id", id).eq("tutor_id", user.id);
+  if (error) return { error: "Не удалось переименовать" };
 }
 
 export async function saveBoardState(studentId: string, items: unknown[]) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  // If authenticated tutor, verify they own this student
+  if (user) {
+    const { data: student } = await supabase
+      .from("students").select("id").eq("id", studentId).eq("tutor_id", user.id).single();
+    if (!student) return { error: "Доступ запрещён" };
+  }
   const db = createAdminClient();
   await db.from("boards").upsert(
     { student_id: studentId, data: { items }, updated_at: new Date().toISOString() },
@@ -100,6 +112,13 @@ export async function saveBoardState(studentId: string, items: unknown[]) {
 }
 
 export async function loadBoardState(studentId: string): Promise<unknown[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { data: student } = await supabase
+      .from("students").select("id").eq("id", studentId).eq("tutor_id", user.id).single();
+    if (!student) return [];
+  }
   const db = createAdminClient();
   const { data } = await db
     .from("boards")

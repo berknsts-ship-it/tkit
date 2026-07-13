@@ -185,32 +185,33 @@ export async function saveProgress(
   studentId: string,
   results: { cardId: string; deckId: string; correct: boolean }[]
 ) {
+  if (!results.length) return { ok: true };
   const db = createAdminClient();
 
-  for (const r of results) {
-    const { data: existing } = await db
-      .from("trainer_progress")
-      .select("id, correct_count, incorrect_count")
-      .eq("student_id", studentId)
-      .eq("card_id", r.cardId)
-      .maybeSingle();
+  // One SELECT to get all existing records
+  const cardIds = results.map(r => r.cardId);
+  const { data: existing } = await db
+    .from("trainer_progress")
+    .select("card_id, correct_count, incorrect_count")
+    .eq("student_id", studentId)
+    .in("card_id", cardIds);
 
-    if (existing) {
-      await db.from("trainer_progress").update({
-        correct_count:   existing.correct_count   + (r.correct ? 1 : 0),
-        incorrect_count: existing.incorrect_count + (r.correct ? 0 : 1),
-        last_practiced: new Date().toISOString(),
-      }).eq("id", existing.id);
-    } else {
-      await db.from("trainer_progress").insert({
-        student_id:      studentId,
-        card_id:         r.cardId,
-        deck_id:         r.deckId,
-        correct_count:   r.correct ? 1 : 0,
-        incorrect_count: r.correct ? 0 : 1,
-      });
-    }
-  }
+  const existingMap = new Map((existing ?? []).map(e => [e.card_id, e]));
+
+  // One upsert for all cards
+  const upsertData = results.map(r => {
+    const ex = existingMap.get(r.cardId);
+    return {
+      student_id:      studentId,
+      card_id:         r.cardId,
+      deck_id:         r.deckId,
+      correct_count:   (ex?.correct_count ?? 0) + (r.correct ? 1 : 0),
+      incorrect_count: (ex?.incorrect_count ?? 0) + (r.correct ? 0 : 1),
+      last_practiced:  new Date().toISOString(),
+    };
+  });
+
+  await db.from("trainer_progress").upsert(upsertData, { onConflict: "student_id,card_id" });
   return { ok: true };
 }
 

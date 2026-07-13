@@ -310,14 +310,19 @@ function HomeworkCard({ hw, studentId }: { hw: { id: string; title: string; desc
 
   async function toggleSubmit() {
     setLoading(true);
-    if (status === "submitted") {
-      await studentUnsubmitHomework(hw.id, studentId);
-      setStatus("pending");
-    } else {
-      await studentSubmitHomework(hw.id, studentId);
-      setStatus("submitted");
+    try {
+      if (status === "submitted") {
+        await studentUnsubmitHomework(hw.id, studentId);
+        setStatus("pending");
+      } else {
+        await studentSubmitHomework(hw.id, studentId);
+        setStatus("submitted");
+      }
+    } catch {
+      // статус не меняем при ошибке
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (

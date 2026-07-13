@@ -18,13 +18,14 @@ export async function createHomework(formData: FormData): Promise<void> {
 
   if (!student_id || !title) redirect("/tutor/homework/new");
 
-  await supabase.from("homework").insert({
+  const { error } = await supabase.from("homework").insert({
     tutor_id: user.id,
     student_id,
     title,
     description,
     due_date,
   });
+  if (error) redirect("/tutor/homework/new?error=1");
 
   // Пуш ученику (не блокируем редирект)
   pushToStudent(student_id, {
@@ -42,7 +43,10 @@ export async function createHomework(formData: FormData): Promise<void> {
 
 export async function updateHomeworkStatus(id: string, status: string) {
   const supabase = await createClient();
-  await supabase.from("homework").update({ status }).eq("id", id);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { error } = await supabase.from("homework").update({ status }).eq("id", id).eq("tutor_id", user.id);
+  if (error) return;
   revalidatePath("/tutor/homework");
 }
 

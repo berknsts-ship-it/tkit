@@ -15,14 +15,23 @@ export default function CreateSubscriptionForm({ studentId, studentName }: { stu
   const [amount, setAmount]   = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen]       = useState(false);
+  const [error, setError]     = useState<string | null>(null);
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     setLoading(true);
-    const fd = new FormData();
-    fd.set("name", name || "Абонемент");
-    fd.set("total_amount", amount);
-    await createSubscription(studentId, fd);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.set("name", name || "Абонемент");
+      fd.set("total_amount", amount);
+      const result = await createSubscription(studentId, fd);
+      if (result?.error) setError(result.error);
+    } catch {
+      setError("Не удалось создать абонемент");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const card = { background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" };
@@ -76,6 +85,7 @@ export default function CreateSubscriptionForm({ studentId, studentName }: { stu
             className="w-full px-3 py-2 rounded-xl border outline-none text-sm"
             style={{ borderColor: "var(--brown-pale)", background: "#fdf8f0" }} />
         </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex gap-2 pt-1">
           <button type="submit" disabled={loading || !amount}
             className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40"

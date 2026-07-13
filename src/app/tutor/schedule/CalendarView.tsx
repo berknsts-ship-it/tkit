@@ -225,7 +225,9 @@ export default function CalendarView({
           style={{ color: "var(--brown-mid)" }}><ChevronRight size={20}/></button>
       </div>
 
-      {/* Заголовки дней недели */}
+      {/* Заголовки дней недели + сетка — скроллятся горизонтально на мобильном */}
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: 560 }}>
       <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS.map(d => (
           <div key={d} className="text-center text-xs font-medium py-1"
@@ -287,6 +289,8 @@ export default function CalendarView({
           );
         })}
       </div>
+        </div>{/* /min-width */}
+      </div>{/* /overflow-x-auto */}
 
       {/* Форма добавления при клике на день */}
       {selectedDate && (

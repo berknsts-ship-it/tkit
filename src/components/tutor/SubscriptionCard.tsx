@@ -41,6 +41,7 @@ export default function SubscriptionCard({
   const [addAmount, setAddAmount] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const ls = lessons as unknown as Lesson[];
   const spent = sub.total_amount - sub.balance;
@@ -55,13 +56,29 @@ export default function SubscriptionCard({
 
   async function handleRenew(fd: FormData) {
     setLoading(true);
-    await renewSubscription(sub.id, studentId, fd);
+    setError(null);
+    try {
+      const result = await renewSubscription(sub.id, studentId, fd);
+      if (result?.error) setError(result.error);
+    } catch {
+      setError("Не удалось пополнить");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleCancel() {
     if (!window.confirm("Перевести ученика на разовую оплату? Абонемент будет закрыт.")) return;
     setCancelling(true);
-    await cancelSubscription(sub.id, studentId);
+    setError(null);
+    try {
+      const result = await cancelSubscription(sub.id, studentId);
+      if (result?.error) setError(result.error);
+    } catch {
+      setError("Не удалось отменить");
+    } finally {
+      setCancelling(false);
+    }
   }
 
   const card = { background: "white", borderColor: "var(--brown-pale)", boxShadow: "var(--shadow-card)" };
@@ -138,6 +155,8 @@ export default function SubscriptionCard({
           Уроков по этому абонементу ещё нет. Добавляйте уроки в расписании — они автоматически привяжутся.
         </p>
       )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {/* Пополнение */}
       {renewMode && (

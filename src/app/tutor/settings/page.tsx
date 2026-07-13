@@ -96,7 +96,7 @@ export default function SettingsPage() {
             {/* Фон */}
             <div>
               <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--brown-mid)" }}>Фон доски</p>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {BOARD_BGS.map(b => (
                   <button key={b.v} onClick={() => setBoardBg(b.v)}
                     className="flex flex-col items-center gap-1 py-3 rounded-xl border text-sm transition-all"

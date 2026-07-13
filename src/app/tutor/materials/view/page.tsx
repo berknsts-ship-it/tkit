@@ -20,7 +20,7 @@ function Viewer() {
   const isAudio = ["mp3", "m4a", "wav", "ogg", "aac"].includes(ext ?? "");
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)]">
+    <div className="flex flex-col h-[calc(100dvh-80px)]">
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-lg font-semibold truncate" style={{ color: "var(--brown-dark)" }}>{name}</h1>
         <a href={url} target="_blank" rel="noopener noreferrer"
