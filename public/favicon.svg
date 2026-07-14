@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="#fdf8f0"/>
+  <!-- Crossbar -->
+  <rect x="3" y="2" width="26" height="9" rx="2" fill="#3b2a1a"/>
+  <!-- Stem (centered: stemW=11, stemX=7 → canvas x = 3+7 = 10) -->
+  <rect x="10" y="9" width="11" height="21" rx="1.5" fill="#3b2a1a"/>
+  <!-- Accent square — bottom-left concave corner -->
+  <rect x="4" y="11" width="7" height="7" rx="1.5" fill="#7c3a1e"/>
+</svg>
