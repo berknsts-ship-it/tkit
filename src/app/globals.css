@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Board fonts — served locally via fontsource, no CDN */
+@import "@fontsource/caveat/400.css";
+@import "@fontsource/caveat/700.css";
+@import "@fontsource/architects-daughter/400.css";
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/700.css";
+@import "@fontsource/montserrat/400.css";
+@import "@fontsource/montserrat/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+
 :root {
   --background: #fdf8f0;
   --foreground: #3b2a1a;

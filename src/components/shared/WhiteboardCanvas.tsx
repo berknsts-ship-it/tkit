@@ -179,10 +179,12 @@ const COLORS           = ["#1a1a1a","#e03030","#2060d0","#20a040","#d07020","#90
 const HIGHLIGHT_COLORS = ["#ffe400","#80ff60","#60e0ff","#ff80d0","#ffaa40"];
 const SIZES            = [2, 5, 12, 24];
 const FONTS = [
-  { label: "Обычный",  family: "Arial, sans-serif" },
-  { label: "Serif",    family: "'Times New Roman', serif" },
-  { label: "Моно",     family: "'Courier New', monospace" },
-  { label: "Рукопись", family: "Georgia, serif" },
+  { label: "Обычный",           family: "Arial, sans-serif" },
+  { label: "Caveat",            family: "'Caveat', cursive" },
+  { label: "Architects Daughter", family: "'Architects Daughter', cursive" },
+  { label: "Playfair",          family: "'Playfair Display', serif" },
+  { label: "Montserrat",        family: "'Montserrat', sans-serif" },
+  { label: "JetBrains Mono",    family: "'JetBrains Mono', monospace" },
 ];
 const RULING_OPTIONS: { v: Ruling; title: string }[] = [
   { v: "none",        title: "Без разлиновки" },
