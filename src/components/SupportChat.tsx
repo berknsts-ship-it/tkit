@@ -116,7 +116,7 @@ function SupportPopup({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Content */}
-      <div className="p-4" style={{ maxHeight: 400, overflowY: "auto" }}>
+      <div className="p-4" style={{ maxHeight: "min(400px, calc(100dvh - 180px))", overflowY: "auto" }}>
 
         {/* Thread tab */}
         {tab === "thread" && (
@@ -234,7 +234,7 @@ function SupportPopup({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SupportChatButton() {
+export function SupportChatButton({ dropUp = false }: { dropUp?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
@@ -251,7 +251,7 @@ export function SupportChatButton() {
         <MessageCircle size={15} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-[200]">
+        <div className={`absolute right-0 z-[200] ${dropUp ? "bottom-full mb-2" : "top-full mt-2"}`}>
           <SupportPopup onClose={() => setOpen(false)} />
         </div>
       )}

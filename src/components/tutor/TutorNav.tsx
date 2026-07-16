@@ -162,10 +162,10 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, sub
               </Link>
             )}
           </div>
-          <div className="border-t px-4 py-4 flex items-center justify-between"
-            style={{ borderColor: "var(--brown-pale)" }}>
+          <div className="border-t px-4 flex items-center justify-between"
+            style={{ borderColor: "var(--brown-pale)", paddingTop: 16, paddingBottom: "calc(16px + env(safe-area-inset-bottom))" }}>
             <div className="flex items-center gap-3">
-              <SupportChatButton />
+              <SupportChatButton dropUp />
               <span className="text-sm" style={{ color: "var(--brown-mid)" }}>{tutorName}</span>
             </div>
             <button onClick={handleSignOut}
