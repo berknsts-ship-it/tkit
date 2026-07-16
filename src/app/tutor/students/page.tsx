@@ -6,6 +6,7 @@ import { UserPlus } from "lucide-react";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
 import CopyStudentLink from "@/components/tutor/CopyStudentLink";
 import DeleteStudentButton from "@/components/tutor/DeleteStudentButton";
+import DeleteDemoButton from "@/components/tutor/DeleteDemoButton";
 
 export default async function StudentsPage() {
   const supabase = await createClient();
@@ -84,11 +85,19 @@ export default async function StudentsPage() {
                     {s.name[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <Link href={`/tutor/students/${s.id}`}
-                      className="font-semibold hover:underline block truncate"
-                      style={{ color: "var(--brown-dark)" }}>
-                      {s.name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/tutor/students/${s.id}`}
+                        className="font-semibold hover:underline truncate"
+                        style={{ color: "var(--brown-dark)" }}>
+                        {s.name}
+                      </Link>
+                      {s.is_demo && (
+                        <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0"
+                          style={{ background: "#fff8e6", color: "#a06800", border: "1px solid #f0c040" }}>
+                          Пример
+                        </span>
+                      )}
+                    </div>
                     {s.notes && (
                       <span className="text-xs truncate block" style={{ color: "var(--brown-mid)" }}>{s.notes}</span>
                     )}
@@ -128,7 +137,7 @@ export default async function StudentsPage() {
                     style={{ borderColor: "var(--brown-pale)", color: "var(--brown-dark)" }}>
                     {sub ? "Абонемент" : "Детали"}
                   </Link>
-                  <DeleteStudentButton id={s.id} name={s.name} />
+                  {s.is_demo ? <DeleteDemoButton /> : <DeleteStudentButton id={s.id} name={s.name} />}
                 </div>
               </div>
             );

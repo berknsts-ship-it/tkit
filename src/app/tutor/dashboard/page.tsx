@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveTutorId } from "@/lib/creatorMode";
 import Link from "next/link";
+import OnboardingChecklist from "@/components/OnboardingChecklist";
+import WelcomeModal from "@/components/WelcomeModal";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -10,12 +12,15 @@ export default async function DashboardPage() {
   const db = createAdminClient();
 
   const [
+    { data: tutorData },
     { count: studentsCount },
     { count: lessonsCount },
     { count: hwCount },
     { data: unpaidLessons },
-    { data: tutorPlan },
   ] = await Promise.all([
+    db.from("tutors")
+      .select("plan, plan_expires_at, onboarding_steps, onboarding_completed, welcome_shown, subject_profile")
+      .eq("id", tutorId).single(),
     db.from("students").select("*", { count: "exact", head: true }).eq("tutor_id", tutorId),
     db.from("lessons").select("*", { count: "exact", head: true })
       .eq("tutor_id", tutorId).eq("status", "scheduled"),
@@ -25,17 +30,69 @@ export default async function DashboardPage() {
       .eq("tutor_id", tutorId)
       .eq("payment_status", "unpaid")
       .neq("status", "cancelled"),
-    db.from("tutors").select("plan, plan_expires_at").eq("id", tutorId).single(),
   ]);
 
   const unpaidTotal = (unpaidLessons ?? []).reduce((s, l) => s + (l.price_rub ?? 0), 0);
 
-  const plan = tutorPlan?.plan ?? "free";
-  const expiresAt = tutorPlan?.plan_expires_at ? new Date(tutorPlan.plan_expires_at) : null;
+  const plan = tutorData?.plan ?? "free";
+  const expiresAt = tutorData?.plan_expires_at ? new Date(tutorData.plan_expires_at) : null;
   const isPermanent = expiresAt && expiresAt.getFullYear() >= 2099;
   const daysLeft = expiresAt && !isPermanent
     ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000)
     : null;
+
+  // ── Онбординг ──────────────────────────────────────────────────────────
+  const onboardingCompleted = tutorData?.onboarding_completed ?? true;
+  const welcomeShown = tutorData?.welcome_shown ?? true;
+  const storedSteps = (tutorData?.onboarding_steps ?? {}) as Record<string, boolean>;
+
+  type StepItem = { key: string; label: string; href: string; done: boolean };
+  let onboardingSteps: StepItem[] = [];
+
+  if (!onboardingCompleted) {
+    // Получаем id демо-ученика чтобы исключить из проверок
+    const { data: demoList } = await db
+      .from("students").select("id")
+      .eq("tutor_id", tutorId).eq("is_demo", true);
+    const demoIds = (demoList ?? []).map(s => s.id as string);
+
+    const [{ count: realSC }, { count: realLC }] = await Promise.all([
+      db.from("students").select("*", { count: "exact", head: true })
+        .eq("tutor_id", tutorId).eq("is_demo", false),
+      demoIds.length > 0
+        ? db.from("lessons").select("*", { count: "exact", head: true })
+            .eq("tutor_id", tutorId).eq("status", "scheduled")
+            .not("student_id", "in", `(${demoIds.join(",")})`)
+        : db.from("lessons").select("*", { count: "exact", head: true })
+            .eq("tutor_id", tutorId).eq("status", "scheduled"),
+    ]);
+
+    const computed: Record<string, boolean> = {
+      add_student:      (realSC ?? 0) > 0,
+      setup_schedule:   (realLC ?? 0) > 0,
+      open_board:       !!storedSteps.open_board,
+      settings_profile: !!storedSteps.settings_profile,
+    };
+
+    // Сохраняем в БД если шаги были выполнены
+    const updates: Record<string, boolean> = {};
+    for (const [key, done] of Object.entries(computed)) {
+      if (done && !storedSteps[key]) updates[key] = true;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.from("tutors")
+        .update({ onboarding_steps: { ...storedSteps, ...updates } })
+        .eq("id", tutorId);
+    }
+
+    const finalSteps = { ...storedSteps, ...updates, ...computed };
+    onboardingSteps = [
+      { key: "add_student",      label: "Добавьте своего первого ученика",          href: "/tutor/students/new", done: finalSteps.add_student ?? false },
+      { key: "setup_schedule",   label: "Настройте расписание",                     href: "/tutor/schedule",     done: finalSteps.setup_schedule ?? false },
+      { key: "open_board",       label: "Откройте доску и попробуйте инструменты",  href: "/tutor/board",        done: finalSteps.open_board ?? false },
+      { key: "settings_profile", label: "Выберите профиль предмета в настройках",   href: "/tutor/settings",     done: finalSteps.settings_profile ?? false },
+    ];
+  }
 
   const cardStyle = {
     background: "white",
@@ -45,7 +102,14 @@ export default async function DashboardPage() {
 
   return (
     <div>
+      <WelcomeModal show={!welcomeShown} />
+
       <h1 className="text-2xl font-bold mb-6">Главная</h1>
+
+      {/* Чеклист онбординга */}
+      {!onboardingCompleted && onboardingSteps.length > 0 && (
+        <OnboardingChecklist steps={onboardingSteps} />
+      )}
 
       {/* Баннер тарифного плана */}
       {plan === "free" && (

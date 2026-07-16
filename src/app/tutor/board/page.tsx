@@ -26,13 +26,23 @@ export default async function BoardPage({ searchParams }: Props) {
     db.from("students").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("groups").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("materials").select("id, title, file_url, file_name").eq("tutor_id", tutorId).order("created_at", { ascending: false }),
-    db.from("tutors").select("subject_profile, board_bg").eq("id", tutorId).single(),
+    db.from("tutors").select("subject_profile, board_bg, onboarding_steps, onboarding_completed").eq("id", tutorId).single(),
   ]);
   const students   = studentsRes.data ?? [];
   const groups     = groupsRes.data ?? [];
   const materials  = materialsRes.data ?? [];
   const subjectProfile = tutorRes.data?.subject_profile ?? "other";
   const boardBg        = tutorRes.data?.board_bg        ?? "dots";
+
+  // Помечаем шаг онбординга open_board (единоразово)
+  if (!tutorRes.data?.onboarding_completed) {
+    const steps = (tutorRes.data?.onboarding_steps ?? {}) as Record<string, boolean>;
+    if (!steps.open_board) {
+      await db.from("tutors")
+        .update({ onboarding_steps: { ...steps, open_board: true } })
+        .eq("id", tutorId);
+    }
+  }
 
   let snapshots: { id: string; title: string; created_at: string; lesson_id: string | null; lessons?: { scheduled_at: string } | null }[] = [];
   let todayLesson: { id: string } | null = null;

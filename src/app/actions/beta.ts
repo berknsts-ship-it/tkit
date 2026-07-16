@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 
 // Символы без двусмысленных 0/O, 1/I/L
 const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const STUDENT_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function randomCode(): string {
   let s = "BETA-";
@@ -65,7 +66,113 @@ export async function betaRegister(
     .update({ used_by: user.id, used_at: new Date().toISOString() })
     .eq("code", upperCode);
 
+  // 5. Создаём демо-ученика для онбординга (ошибки не блокируют регистрацию)
+  await createDemoStudentForTutor(db, user.id).catch(() => {});
+
   return { success: true };
+}
+
+async function createDemoStudentForTutor(
+  db: ReturnType<typeof createAdminClient>,
+  tutorId: string,
+) {
+  // Генерируем уникальный код ученика
+  function genCode() {
+    return Array.from({ length: 6 }, () =>
+      STUDENT_CHARS[Math.floor(Math.random() * STUDENT_CHARS.length)],
+    ).join("");
+  }
+  let accessCode = genCode();
+  for (let i = 0; i < 5; i++) {
+    const { data } = await db.from("students").select("id").eq("access_code", accessCode).maybeSingle();
+    if (!data) break;
+    accessCode = genCode();
+  }
+
+  const { data: student, error } = await db
+    .from("students")
+    .insert({
+      tutor_id: tutorId,
+      name: "Мария (пример)",
+      notes: "Это демо-ученик. Удалите его когда будете готовы.",
+      access_code: accessCode,
+      is_demo: true,
+    })
+    .select("id")
+    .single();
+
+  if (error || !student) return;
+  const studentId = student.id;
+  const now = new Date();
+
+  // Следующий вторник и пятница в 13:00 UTC = 16:00 МСК
+  function nextWeekday(dow: number): string {
+    const d = new Date(now);
+    const diff = ((dow - d.getDay() + 7) % 7) || 7;
+    d.setDate(d.getDate() + diff);
+    d.setHours(13, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  await db.from("lessons").insert([
+    {
+      tutor_id: tutorId, student_id: studentId,
+      scheduled_at: nextWeekday(2), duration_min: 60,
+      price_rub: 1500, status: "scheduled", payment_status: "unpaid",
+    },
+    {
+      tutor_id: tutorId, student_id: studentId,
+      scheduled_at: nextWeekday(5), duration_min: 60,
+      price_rub: 1500, status: "scheduled", payment_status: "unpaid",
+    },
+  ]);
+
+  const pastDate = new Date(now);
+  pastDate.setDate(pastDate.getDate() - 5);
+  const futureDate = new Date(now);
+  futureDate.setDate(futureDate.getDate() + 3);
+
+  await db.from("homework").insert([
+    {
+      tutor_id: tutorId, student_id: studentId,
+      title: "Упражнение 15 — времена глаголов",
+      description: "Present Simple и Present Continuous",
+      due_date: pastDate.toISOString().split("T")[0],
+      status: "checked",
+    },
+    {
+      tutor_id: tutorId, student_id: studentId,
+      title: "Чтение: текст «Путешествия»",
+      description: "Прочитать и выписать незнакомые слова",
+      due_date: futureDate.toISOString().split("T")[0],
+      status: "pending",
+    },
+  ]);
+
+  await db.from("materials").insert({
+    tutor_id: tutorId,
+    student_id: studentId,
+    title: "Graded Reader A2 — пример материала",
+    file_url: "https://learnenglishteens.britishcouncil.org/",
+    file_name: null,
+  });
+
+  const { data: topic } = await db
+    .from("vocabulary_topics")
+    .insert({ tutor_id: tutorId, student_id: studentId, title: "Путешествия", language: "en-US" })
+    .select("id")
+    .single();
+
+  if (topic) {
+    await db.from("vocabulary_words").insert([
+      { topic_id: topic.id, word: "journey",      translation: "путешествие",       example: "It was a long journey." },
+      { topic_id: topic.id, word: "destination",  translation: "место назначения",  example: "Our destination was Paris." },
+      { topic_id: topic.id, word: "luggage",      translation: "багаж",             example: "Don't forget your luggage." },
+      { topic_id: topic.id, word: "boarding pass",translation: "посадочный талон",  example: "Show your boarding pass." },
+      { topic_id: topic.id, word: "departure",    translation: "отправление",       example: "The departure is at 9 AM." },
+      { topic_id: topic.id, word: "arrival",      translation: "прибытие",          example: "The arrival was delayed." },
+    ]);
+  }
 }
 
 // Генерация кодов (только для создателя)
