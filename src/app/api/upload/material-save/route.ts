@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
+const SITE_URL = process.env.SITE_URL ?? "https://tkit.space";
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -14,13 +16,17 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const { data: { publicUrl } } = admin.storage.from("materials").getPublicUrl(storagePath);
+
+  const isVPS = storagePath.startsWith("vps:");
+  const fileUrl = isVPS
+    ? `${SITE_URL}/uploads/${storagePath.slice(4)}`
+    : admin.storage.from("materials").getPublicUrl(storagePath).data.publicUrl;
 
   const { error } = await admin.from("materials").insert({
     tutor_id: user.id,
     student_id: null,
     title,
-    file_url: publicUrl,
+    file_url: fileUrl,
     file_name: fileName,
   });
 

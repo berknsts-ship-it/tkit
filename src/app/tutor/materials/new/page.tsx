@@ -89,7 +89,7 @@ export default function NewMaterialPage() {
 
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: "var(--brown-mid)" }}>
-              Файл (PDF, изображение, документ — до 50 МБ)
+              Файл (PDF, видео, изображение, документ — до 300 МБ)
             </label>
             {file ? (
               <div className="flex items-center gap-3 px-4 py-3 rounded-xl border"
