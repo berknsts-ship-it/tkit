@@ -4145,70 +4145,49 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                 ))}
               </div>
             )}
-            {/* LaTeX формула */}
-            {!profileHide.has("formula") && (
-              <div className="relative">
-                <button onClick={() => { setShowFormulaPanel(p => !p); setShowCodePanel(false); }}
-                  title="Вставить формулу LaTeX"
-                  className="text-xs font-bold px-2 py-1 rounded-lg border-2"
-                  style={{ borderColor: showFormulaPanel?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", background: showFormulaPanel?"var(--brown-pale)":"white" }}>
-                  ∑
-                </button>
-                {showFormulaPanel && (
-                  <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-2"
-                    style={{ borderColor:"var(--brown-pale)", minWidth:320 }}>
-                    <div className="text-xs mb-1.5" style={{ color:"var(--brown-mid)" }}>LaTeX-формула. Например: \frac{"{a}{b}"}, x^2+y^2</div>
-                    <form onSubmit={e => { e.preventDefault(); addFormulaToBoard(); }}
-                      style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <input value={formulaInput} onChange={e => setFormulaInput(e.target.value)}
-                        placeholder="\frac{a}{b}, \int_0^1 x\,dx" autoFocus autoComplete="off" spellCheck={false}
-                        className="text-sm font-mono rounded-lg border outline-none"
-                        style={{ flex:1, minWidth:0, padding:"6px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
-                      <button type="submit" disabled={!formulaInput.trim()}
-                        className="text-sm rounded-lg font-medium disabled:opacity-40"
-                        style={{ padding:"6px 12px", background:"var(--gradient-primary)", color:"white", whiteSpace:"nowrap", flexShrink:0 }}>
-                        Добавить
-                      </button>
-                    </form>
-                  </div>
-                )}
+            {/* Formula/code desktop popups — triggered by side panel buttons */}
+            {!profileHide.has("formula") && showFormulaPanel && (
+              <div className="hidden sm:block fixed z-30 bg-white rounded-xl border shadow-lg p-3"
+                style={{ borderColor:"var(--brown-pale)", minWidth:320, top:52, left:52 }}>
+                <div className="text-xs mb-1.5" style={{ color:"var(--brown-mid)" }}>LaTeX-формула. Например: \frac{"{a}{b}"}, x^2+y^2</div>
+                <form onSubmit={e => { e.preventDefault(); addFormulaToBoard(); }}
+                  style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <input value={formulaInput} onChange={e => setFormulaInput(e.target.value)}
+                    placeholder="\frac{a}{b}, \int_0^1 x\,dx" autoFocus autoComplete="off" spellCheck={false}
+                    className="text-sm font-mono rounded-lg border outline-none"
+                    style={{ flex:1, minWidth:0, padding:"6px 8px", borderColor:"var(--brown-pale)", background:"#fdf8f0", color:"var(--brown-dark)" }}/>
+                  <button type="submit" disabled={!formulaInput.trim()}
+                    className="text-sm rounded-lg font-medium disabled:opacity-40"
+                    style={{ padding:"6px 12px", background:"var(--gradient-primary)", color:"white", whiteSpace:"nowrap", flexShrink:0 }}>
+                    Добавить
+                  </button>
+                </form>
               </div>
             )}
-            {/* Код */}
-            {!profileHide.has("code") && (
-              <div className="relative">
-                <button onClick={() => { setShowCodePanel(p => !p); setShowFormulaPanel(false); }}
-                  title="Вставить блок кода"
-                  className="text-xs font-bold px-2 py-1 rounded-lg border-2 font-mono"
-                  style={{ borderColor: showCodePanel?"var(--brown-dark)":"var(--brown-pale)", color:"var(--brown-dark)", background: showCodePanel?"var(--brown-pale)":"white" }}>
-                  {"</>"}
-                </button>
-                {showCodePanel && (
-                  <div className="absolute top-full mt-1 right-0 z-30 bg-white rounded-xl border shadow-lg p-2"
-                    style={{ borderColor:"var(--brown-pale)", minWidth:360 }}>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-xs" style={{ color:"var(--brown-mid)" }}>Язык:</span>
-                      {(["python","javascript","sql","cpp"] as const).map(l => (
-                        <button key={l} onClick={() => setCodeLang(l)}
-                          className="text-xs px-2 py-0.5 rounded border"
-                          style={{ borderColor: codeLang===l?"var(--brown-dark)":"var(--brown-pale)", fontWeight: codeLang===l?600:400, background: codeLang===l?"var(--brown-pale)":"transparent", color:"var(--brown-dark)" }}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                    <form onSubmit={e => { e.preventDefault(); addCodeToBoard(); }}>
-                      <textarea value={codeInput} onChange={e => setCodeInput(e.target.value)}
-                        placeholder="# код здесь" autoFocus rows={5} spellCheck={false}
-                        className="w-full text-xs font-mono px-2 py-1.5 rounded-lg border outline-none resize-none"
-                        style={{ borderColor:"var(--brown-pale)", background:"#f8fffe", color:"var(--brown-dark)" }}/>
-                      <button type="submit" disabled={!codeInput.trim()}
-                        className="mt-1 text-sm px-3 py-1 rounded-lg font-medium disabled:opacity-40"
-                        style={{ background:"var(--gradient-primary)", color:"white" }}>
-                        Добавить
-                      </button>
-                    </form>
-                  </div>
-                )}
+            {!profileHide.has("code") && showCodePanel && (
+              <div className="hidden sm:block fixed z-30 bg-white rounded-xl border shadow-lg p-3"
+                style={{ borderColor:"var(--brown-pale)", minWidth:360, top:52, left:52 }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs" style={{ color:"var(--brown-mid)" }}>Язык:</span>
+                  {(["python","javascript","sql","cpp"] as const).map(l => (
+                    <button key={l} onClick={() => setCodeLang(l)}
+                      className="text-xs px-2 py-0.5 rounded border"
+                      style={{ borderColor: codeLang===l?"var(--brown-dark)":"var(--brown-pale)", fontWeight: codeLang===l?600:400, background: codeLang===l?"var(--brown-pale)":"transparent", color:"var(--brown-dark)" }}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <form onSubmit={e => { e.preventDefault(); addCodeToBoard(); }}>
+                  <textarea value={codeInput} onChange={e => setCodeInput(e.target.value)}
+                    placeholder="# код здесь" autoFocus rows={5} spellCheck={false}
+                    className="w-full text-xs font-mono px-2 py-1.5 rounded-lg border outline-none resize-none"
+                    style={{ borderColor:"var(--brown-pale)", background:"#f8fffe", color:"var(--brown-dark)" }}/>
+                  <button type="submit" disabled={!codeInput.trim()}
+                    className="mt-1 text-sm px-3 py-1 rounded-lg font-medium disabled:opacity-40"
+                    style={{ background:"var(--gradient-primary)", color:"white" }}>
+                    Добавить
+                  </button>
+                </form>
               </div>
             )}
             {/* f(x) button — вставить график */}
