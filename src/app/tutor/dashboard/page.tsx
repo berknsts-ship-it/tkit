@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getEffectiveTutorId } from "@/lib/creatorMode";
+import { getEffectiveTutorId, isCreator } from "@/lib/creatorMode";
 import Link from "next/link";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import WelcomeModal from "@/components/WelcomeModal";
@@ -9,6 +9,7 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const tutorId = await getEffectiveTutorId(user!);
+  const userIsCreator = isCreator(user?.email);
   const db = createAdminClient();
 
   const [
@@ -111,8 +112,8 @@ export default async function DashboardPage() {
         <OnboardingChecklist steps={onboardingSteps} />
       )}
 
-      {/* Баннер тарифного плана */}
-      {plan === "free" && (
+      {/* Баннер тарифного плана — скрыт для создателя */}
+      {!userIsCreator && plan === "free" && (
         <Link href="/tutor/subscription"
           className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 mb-6 border"
           style={{ background: "#fff8e6", borderColor: "#f0c040", color: "#a06800" }}>
@@ -120,7 +121,7 @@ export default async function DashboardPage() {
           <span className="text-sm font-semibold shrink-0">Подробнее →</span>
         </Link>
       )}
-      {plan === "pro" && daysLeft !== null && daysLeft <= 14 && (
+      {!userIsCreator && plan === "pro" && daysLeft !== null && daysLeft <= 14 && (
         <Link href="/tutor/subscription"
           className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 mb-6 border"
           style={{ background: daysLeft <= 3 ? "#fff0f0" : "#fff8e6",
