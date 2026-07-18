@@ -170,6 +170,47 @@ function getCachedImage(url: string, onLoad: () => void): HTMLImageElement | nul
   return null;
 }
 
+// ── path bbox cache (paths are immutable after creation → WeakMap auto-GCs) ───
+const pathBboxCache = new WeakMap<PathItem, { x: number; y: number; w: number; h: number }>();
+
+function getPathBbox(item: PathItem) {
+  let b = pathBboxCache.get(item);
+  if (b) return b;
+  const pts = item.points;
+  if (!pts.length) { b = { x:0, y:0, w:0, h:0 }; pathBboxCache.set(item, b); return b; }
+  let x0 = pts[0].x, y0 = pts[0].y, x1 = x0, y1 = y0;
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i];
+    if (p.x < x0) x0 = p.x; else if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y; else if (p.y > y1) y1 = p.y;
+  }
+  const pad = item.size;
+  b = { x: x0 - pad, y: y0 - pad, w: (x1 - x0) + pad * 2, h: (y1 - y0) + pad * 2 };
+  pathBboxCache.set(item, b); return b;
+}
+
+function itemInViewport(item: DrawItem, vx0: number, vy0: number, vx1: number, vy1: number): boolean {
+  let bx = 0, by = 0, bw = 0, bh = 0;
+  switch (item.type) {
+    case "path": { const b = getPathBbox(item); bx=b.x; by=b.y; bw=b.w; bh=b.h; break; }
+    case "text": {
+      const lines = item.text.split("\n");
+      bw = Math.max(...lines.map(l => l.length)) * item.fontSize * 0.65 + 40;
+      bh = lines.length * item.fontSize * 1.5 + 8;
+      bx = item.x - 20; by = item.y - 4; break;
+    }
+    case "shape": {
+      bx = Math.min(item.x1, item.x2) - item.size; by = Math.min(item.y1, item.y2) - item.size;
+      bw = Math.abs(item.x2 - item.x1) + item.size * 2; bh = Math.abs(item.y2 - item.y1) + item.size * 2; break;
+    }
+    default: {
+      const it = item as unknown as { x: number; y: number; w: number; h: number };
+      bx = it.x; by = it.y; bw = it.w; bh = it.h;
+    }
+  }
+  return bx < vx1 && bx + bw > vx0 && by < vy1 && by + bh > vy0;
+}
+
 export interface BoardMaterial { id: string; title: string; file_url: string | null; file_name: string | null; }
 
 export interface WhiteboardRef {
@@ -985,6 +1026,21 @@ function isCardSpeakerHit(card: CardItem, wx: number, wy: number): boolean {
 }
 
 function renderItem(ctx: CanvasRenderingContext2D, item: DrawItem, zoom: number, onLoad?: () => void) {
+  // ── Level of Detail: cheap placeholders at very low zoom ────────────────────
+  if (zoom < 0.3) {
+    if (item.type === "text") {
+      ctx.save();
+      const lines = item.text.split("\n"); const lineH = item.fontSize * 1.4;
+      ctx.fillStyle = item.color + "88";
+      lines.forEach((line, i) => { const lw = Math.max(line.length * item.fontSize * 0.6, 6); ctx.fillRect(item.x, item.y + i * lineH, lw, Math.max(item.fontSize * 0.72, 2)); });
+      ctx.restore(); return;
+    }
+    if (item.type === "image") {
+      ctx.save(); ctx.fillStyle = "#e8e8e8"; ctx.fillRect(item.x, item.y, item.w, item.h);
+      ctx.strokeStyle = "#c0c0c0"; ctx.lineWidth = Math.max(1/zoom, 0.5); ctx.strokeRect(item.x, item.y, item.w, item.h);
+      ctx.restore(); return;
+    }
+  }
   if (item.type === "card") { drawCard(ctx, item as CardItem, zoom); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
   if (item.type === "path")    { renderPath(ctx, item); if (item.locked) { /* paths: no badge */ } return; }
   if (item.type === "image")   { renderImage(ctx, item, onLoad ?? (() => {})); if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom); return; }
@@ -1441,10 +1497,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       sctx.save(); sctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panX * dpr, panY * dpr);
       drawRuling(sctx, rulingRef.current, w / dpr, h / dpr, zoom, panX, panY, rulingSizeRef.current);
       if (pdfOffscreen.current) sctx.drawImage(pdfOffscreen.current, 0, 0);
+      // ── viewport culling: world-space bounds of visible area ─────────────────
+      const cssW = w / dpr, cssH = h / dpr;
+      const vx0 = -panX / zoom, vy0 = -panY / zoom;
+      const vx1 = (cssW - panX) / zoom, vy1 = (cssH - panY) / zoom;
       for (const item of itemsRef.current) {
         if (item.id === editingIdRef.current) continue;
         const itemPage = (item as { pdfPage?: number }).pdfPage;
         if (itemPage !== undefined && pdfPageRef.current !== null && itemPage !== pdfPageRef.current) continue;
+        if (!itemInViewport(item, vx0, vy0, vx1, vy1)) continue;
         if (item.type === "frame" && item.private && role !== "tutor" && item.ownerStudentId !== currentStudentId && privacyModeRef.current) {
           renderPrivateFrame(sctx, item, zoom); continue;
         }
