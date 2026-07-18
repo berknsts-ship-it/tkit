@@ -234,7 +234,7 @@ function SupportPopup({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SupportChatButton({ dropUp = false }: { dropUp?: boolean }) {
+export function SupportChatButton({ dropUp = false, alignLeft = false }: { dropUp?: boolean; alignLeft?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
@@ -251,7 +251,7 @@ export function SupportChatButton({ dropUp = false }: { dropUp?: boolean }) {
         <MessageCircle size={15} />
       </button>
       {open && (
-        <div className={`absolute right-0 z-[200] ${dropUp ? "bottom-full mb-2" : "top-full mt-2"}`}>
+        <div className={`absolute z-[200] ${alignLeft ? "left-0" : "right-0"} ${dropUp ? "bottom-full mb-2" : "top-full mt-2"}`}>
           <SupportPopup onClose={() => setOpen(false)} />
         </div>
       )}
