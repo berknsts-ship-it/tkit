@@ -155,7 +155,7 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {tab === "board" && (
             <>
-              <WhiteboardCanvas key={boardRoomId} ref={canvasRef} roomId={boardRoomId} role="student" materials={materials} subjectProfile={subjectProfile} boardBg={boardBg} currentStudentId={studentId} />
+              <WhiteboardCanvas key={boardRoomId} ref={canvasRef} roomId={boardRoomId} role="student" materials={materials} subjectProfile={subjectProfile} boardBg={boardBg} currentStudentId={studentId} myName={student.name} />
               <SyncedAudio roomId={boardRoomId} role="student" />
               <SyncedVideo roomId={boardRoomId} role="student" />
             </>

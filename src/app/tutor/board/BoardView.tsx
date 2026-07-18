@@ -21,7 +21,7 @@ type Snapshot = {
 };
 
 export default function BoardView({
-  roomId, studentId, studentName, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents, subjectProfile, boardBg,
+  roomId, studentId, studentName, materials, snapshots: initialSnapshots, todayLessonId, isGroup, groupStudents, subjectProfile, boardBg, tutorName,
 }: {
   roomId: string;
   studentId?: string;
@@ -33,6 +33,7 @@ export default function BoardView({
   groupStudents?: { id: string; name: string }[];
   subjectProfile?: string;
   boardBg?: string;
+  tutorName?: string;
 }) {
   const canvasRef   = useRef<WhiteboardRef>(null);
   const canvasDivRef= useRef<HTMLDivElement>(null);
@@ -235,7 +236,7 @@ export default function BoardView({
           {/* Canvas area */}
           <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
             <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative" style={{ minHeight: "40vh" }}>
-              <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} students={groupStudents} fullscreen={fullscreen} subjectProfile={subjectProfile} boardBg={boardBg} studentName={studentName} />
+              <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} students={groupStudents} fullscreen={fullscreen} subjectProfile={subjectProfile} boardBg={boardBg} studentName={studentName} myName={tutorName} />
             </div>
             <SyncedAudio roomId={roomId} role="tutor" />
             <SyncedVideo roomId={roomId} role="tutor" />

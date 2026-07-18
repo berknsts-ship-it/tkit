@@ -26,13 +26,14 @@ export default async function BoardPage({ searchParams }: Props) {
     db.from("students").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("groups").select("id, name").eq("tutor_id", tutorId).order("name"),
     db.from("materials").select("id, title, file_url, file_name").eq("tutor_id", tutorId).order("created_at", { ascending: false }),
-    db.from("tutors").select("subject_profile, board_bg, onboarding_steps, onboarding_completed").eq("id", tutorId).single(),
+    db.from("tutors").select("subject_profile, board_bg, onboarding_steps, onboarding_completed, name").eq("id", tutorId).single(),
   ]);
   const students   = studentsRes.data ?? [];
   const groups     = groupsRes.data ?? [];
   const materials  = materialsRes.data ?? [];
   const subjectProfile = tutorRes.data?.subject_profile ?? "other";
   const boardBg        = tutorRes.data?.board_bg        ?? "dots";
+  const tutorName      = tutorRes.data?.name            ?? undefined;
 
   // Помечаем шаг онбординга open_board (единоразово)
   if (!tutorRes.data?.onboarding_completed) {
@@ -139,6 +140,7 @@ export default async function BoardPage({ searchParams }: Props) {
           groupStudents={groupStudents}
           subjectProfile={subjectProfile}
           boardBg={boardBg}
+          tutorName={tutorName}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">

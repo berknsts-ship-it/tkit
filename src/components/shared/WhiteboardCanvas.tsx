@@ -132,7 +132,7 @@ type WsEvent =
   | { type: "update";  item: DrawItem }
   | { type: "clear" }
   | { type: "laser";   x: number; y: number }
-  | { type: "cursor";  x: number; y: number }
+  | { type: "cursor";  x: number; y: number; name: string; senderId: string; color: string }
   | { type: "viewport"; zoom: number; panX: number; panY: number }
   | { type: "pdf_page"; pdfUrl: string; pdfPage: number }
   | { type: "pdf_clear" }
@@ -1133,8 +1133,8 @@ function parseFormula(input: string): ((x: number) => number) | null {
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean; subjectProfile?: string; boardBg?: string; studentName?: string }>(
-function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false, subjectProfile, boardBg, studentName }, ref) {
+const WhiteboardCanvas = forwardRef<WhiteboardRef, { roomId: string; role?: "tutor" | "student"; materials?: BoardMaterial[]; currentStudentId?: string; students?: { id: string; name: string }[]; fullscreen?: boolean; subjectProfile?: string; boardBg?: string; studentName?: string; myName?: string }>(
+function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStudentId, students = [], fullscreen = false, subjectProfile, boardBg, studentName, myName }, ref) {
 
   const containerRef    = useRef<HTMLDivElement>(null);
   const canvasRef       = useRef<HTMLCanvasElement>(null);
@@ -1311,11 +1311,14 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   // laser / cursor overlays
   const [laserPos,     setLaserPos]     = useState<Pt|null>(null);
   const [ownLaser,     setOwnLaser]     = useState<Pt|null>(null);
-  const [remoteCursor, setRemoteCursor] = useState<Pt|null>(null);
+  type RemoteCursorEntry = { x: number; y: number; name: string; color: string };
+  const [remoteCursors, setRemoteCursors] = useState<Map<string, RemoteCursorEntry>>(() => new Map());
   const laserTimer        = useRef<ReturnType<typeof setTimeout>|null>(null);
   const ownLaserTimer     = useRef<ReturnType<typeof setTimeout>|null>(null);
-  const remoteCursorTimer = useRef<ReturnType<typeof setTimeout>|null>(null);
+  const remoteCursorTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const cursorThrottle    = useRef(0);
+  const mySenderIdRef     = useRef(Math.random().toString(36).slice(2));
+  const myColor = role === "tutor" ? "#5555e0" : FRAME_COLORS[parseInt(mySenderIdRef.current.slice(0,6), 36) % FRAME_COLORS.length];
 
   // pdf
   const [pdf,        setPdf]        = useState<{url:string;title:string;page:number;total:number}|null>(null);
@@ -1854,9 +1857,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         laserTimer.current = setTimeout(() => setLaserPos(null), 2500); return;
       }
       if (payload.type === "cursor") {
-        setRemoteCursor({ x: payload.x, y: payload.y });
-        if (remoteCursorTimer.current) clearTimeout(remoteCursorTimer.current);
-        remoteCursorTimer.current = setTimeout(() => setRemoteCursor(null), 3000); return;
+        const { senderId, x, y, name: senderName, color: senderColor } = payload;
+        setRemoteCursors(prev => { const m = new Map(prev); m.set(senderId, { x, y, name: senderName, color: senderColor }); return m; });
+        const existing = remoteCursorTimers.current.get(senderId);
+        if (existing) clearTimeout(existing);
+        remoteCursorTimers.current.set(senderId, setTimeout(() => {
+          setRemoteCursors(prev => { const m = new Map(prev); m.delete(senderId); return m; });
+          remoteCursorTimers.current.delete(senderId);
+        }, 3000));
+        return;
       }
       if (payload.type === "path-pt") {
         const { id, x, y, color, size, eraser, highlight } = payload;
@@ -2005,7 +2014,9 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   // cursor broadcast
   const broadcastCursor = (wx: number, wy: number) => {
     const now = Date.now(); if (now - cursorThrottle.current < 33) return;
-    cursorThrottle.current = now; send({ type: "cursor", x: wx, y: wy });
+    cursorThrottle.current = now;
+    const displayName = myName ?? (role === "tutor" ? "Репетитор" : (studentName ?? "Ученик"));
+    send({ type: "cursor", x: wx, y: wy, name: displayName, senderId: mySenderIdRef.current, color: myColor });
   };
 
   // ── history ───────────────────────────────────────────────────────────────────
@@ -3478,7 +3489,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   // ── overlay positions ─────────────────────────────────────────────────────────
   const laserScr  = laserPos     ? w2s(laserPos.x,     laserPos.y)     : null;
   const ownLaserS = ownLaser     ? w2s(ownLaser.x,     ownLaser.y)     : null;
-  const remoteScr = remoteCursor ? w2s(remoteCursor.x, remoteCursor.y) : null;
+  const remoteScr = null; // replaced by remoteCursors Map below
   const textScr   = textInput    ? w2s(textInput.wx,   textInput.wy)   : null;
   const { zoom }  = viewRef.current;
 
@@ -4622,8 +4633,17 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
               style={{ borderColor:"var(--brown-pale)" }}>
               <Trash2 size={13} style={{ color:"#c06040" }}/>
             </button>
-            <div className="flex items-center gap-1 text-xs" style={{ color:connected?"#4a8a4a":"#aaa" }}>
-              <div className="w-2 h-2 rounded-full" style={{ background:connected?"#4a8a4a":"#ccc" }}/>
+            <div className="flex items-center gap-1.5 text-xs">
+              {[...remoteCursors.values()].map((cur, i) => (
+                <div key={i} title={cur.name}
+                  className="w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0"
+                  style={{ background: cur.color }}>
+                  <span style={{ fontSize:7, color:"white", fontWeight:700, lineHeight:1 }}>
+                    {cur.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              ))}
+              <div className="w-2 h-2 rounded-full" style={{ background:connected?"#4a8a4a":"#ccc" }} title={connected?"Подключено":"Нет связи"}/>
             </div>
           </div>
         </div>
@@ -4993,16 +5013,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         )}
 
         {/* Remote cursor */}
-        {remoteScr && (
-          <div className="absolute pointer-events-none" style={{ left:remoteScr.x-6, top:remoteScr.y-6 }}>
-            <div className="w-3 h-3 rounded-full border-2 border-white shadow-md"
-              style={{ background:role==="tutor"?"#5555e0":"#e05020" }}/>
-            <div className="text-white text-center rounded px-1 mt-0.5 whitespace-nowrap"
-              style={{ fontSize:9, background:role==="tutor"?"#5555e0":"#e05020", lineHeight:"14px" }}>
-              {role==="tutor"?"Ученик":"Репетитор"}
+        {[...remoteCursors.entries()].map(([sid, cur]) => {
+          const scr = w2s(cur.x, cur.y);
+          return (
+            <div key={sid} className="absolute pointer-events-none" style={{ left:scr.x-6, top:scr.y-6 }}>
+              <div className="w-3 h-3 rounded-full border-2 border-white shadow-md" style={{ background:cur.color }}/>
+              <div className="text-white text-center rounded px-1 mt-0.5 whitespace-nowrap"
+                style={{ fontSize:9, background:cur.color, lineHeight:"14px" }}>
+                {cur.name}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })}
 
         {/* Pending symbol cursor preview */}
         {pendingSymbol && pendingSymbolPos && (
