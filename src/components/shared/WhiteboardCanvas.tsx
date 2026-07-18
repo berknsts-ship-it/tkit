@@ -1414,6 +1414,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     const dpr = window.devicePixelRatio || 1;
     const { zoom, panX, panY } = viewRef.current;
     const w = canvas.width, h = canvas.height;
+    if (!w || !h) return;
 
     // ── offscreen static canvas — rebuilt only when content/view changes ─────────
     let sc = staticCanvasRef.current;
