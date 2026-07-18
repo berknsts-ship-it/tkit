@@ -81,6 +81,7 @@ interface Props {
   trainerDecks?: TrainerDeck[];
   subjectProfile?: string;
   boardBg?: string;
+  studentGroups?: { id: string; name: string }[];
 }
 
 const TABS = [
@@ -93,15 +94,19 @@ const TABS = [
   { id: "reference", label: "Справочник", Icon: BookMarked    },
 ];
 
-export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [], subjectProfile, boardBg }: Props) {
+export default function StudentCabinet({ studentId, student, subject, lessons, homework, materials, articles, snapshots, topics, unreadNotifications = [], trainerDecks = [], subjectProfile, boardBg, studentGroups = [] }: Props) {
   const [tab,          setTab]          = useState("lessons");
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
+  const [boardRoomId,  setBoardRoomId]  = useState<string>(studentId);
   const canvasRef = useRef<WhiteboardRef>(null);
 
   const theme = (subject && SUBJECT_THEME[subject]) ? SUBJECT_THEME[subject] : DEFAULT_THEME;
 
   // ── Полноэкранный режим: Доска + просмотр конспекта ────────────────────────
   if (tab === "board" || (tab === "notes" && viewSnapshot)) {
+    const boardLabel = boardRoomId === studentId
+      ? "Моя доска"
+      : (studentGroups.find(g => g.id === boardRoomId)?.name ?? "Доска группы");
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "white", display: "flex", flexDirection: "column" }}>
         <div className="flex items-center gap-3 px-4 shrink-0"
@@ -112,18 +117,47 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
             style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>
             <ArrowLeft size={15}/> Назад
           </button>
+          {tab === "board" && studentGroups.length > 0 && (
+            <div className="flex items-center gap-1 overflow-x-auto">
+              <button
+                onClick={() => { setBoardRoomId(studentId); canvasRef.current?.loadItems([]); }}
+                className="text-xs px-2.5 py-1 rounded-lg border shrink-0 transition-all"
+                style={{
+                  borderColor: boardRoomId === studentId ? "var(--brown-mid)" : "var(--brown-pale)",
+                  background:  boardRoomId === studentId ? "var(--brown-mid)" : "transparent",
+                  color:       boardRoomId === studentId ? "white" : "var(--brown-mid)",
+                }}>
+                Моя доска
+              </button>
+              {studentGroups.map(g => (
+                <button key={g.id}
+                  onClick={() => { setBoardRoomId(g.id); canvasRef.current?.loadItems([]); }}
+                  className="text-xs px-2.5 py-1 rounded-lg border shrink-0 transition-all"
+                  style={{
+                    borderColor: boardRoomId === g.id ? "var(--brown-mid)" : "var(--brown-pale)",
+                    background:  boardRoomId === g.id ? "var(--brown-mid)" : "transparent",
+                    color:       boardRoomId === g.id ? "white" : "var(--brown-mid)",
+                  }}>
+                  👥 {g.name}
+                </button>
+              ))}
+            </div>
+          )}
           {tab === "notes" && viewSnapshot && (
             <span className="text-sm font-medium truncate" style={{ color: "var(--brown-dark)" }}>
               {snapshots.find(s => s.id === viewSnapshot)?.title}
             </span>
           )}
+          {tab === "board" && studentGroups.length === 0 && (
+            <span className="text-sm font-medium" style={{ color: "var(--brown-dark)" }}>{boardLabel}</span>
+          )}
         </div>
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {tab === "board" && (
             <>
-              <WhiteboardCanvas ref={canvasRef} roomId={studentId} role="student" materials={materials} subjectProfile={subjectProfile} boardBg={boardBg} currentStudentId={studentId} />
-              <SyncedAudio roomId={studentId} role="student" />
-              <SyncedVideo roomId={studentId} role="student" />
+              <WhiteboardCanvas key={boardRoomId} ref={canvasRef} roomId={boardRoomId} role="student" materials={materials} subjectProfile={subjectProfile} boardBg={boardBg} currentStudentId={studentId} />
+              <SyncedAudio roomId={boardRoomId} role="student" />
+              <SyncedVideo roomId={boardRoomId} role="student" />
             </>
           )}
           {tab === "notes" && viewSnapshot && (

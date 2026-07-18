@@ -18,6 +18,15 @@ export default async function StudentPage({ params }: Props) {
 
   if (!student) redirect(`/student?error=not_found&code=${encodeURIComponent(code)}`);
 
+  // Groups this student belongs to
+  const { data: groupMemberRows } = await supabase
+    .from("group_members")
+    .select("groups(id, name)")
+    .eq("student_id", student.id);
+  type GroupRow = { id: string; name: string };
+  const studentGroups = (groupMemberRows ?? [])
+    .flatMap(r => r.groups ? [r.groups as unknown as GroupRow] : []);
+
   const [
     { data: lessons },
     { data: homework },
@@ -141,6 +150,7 @@ export default async function StudentPage({ params }: Props) {
       homework={homework ?? []}
       materials={materials}
       unreadNotifications={unreadNotifications}
+      studentGroups={studentGroups}
       articles={articles.map(a => ({ id: a.id, title: a.title, content: a.content }))}
       snapshots={snapshots ?? []}
       topics={(topicsRaw ?? []).map(t => ({
