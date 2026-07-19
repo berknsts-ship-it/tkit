@@ -1950,6 +1950,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       }
       if (payload.type === "text_typing") {
         const { id, x, y, text, font, fontSize, color, bold, italic, align } = payload;
+        console.log("[tt] received text_typing", { id, text, x, y });
         remoteDraftsRef.current.set(id, { x, y, text, font, fontSize, color, bold, italic, align });
         render(); return;
       }
@@ -5577,6 +5578,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                         el.style.height = el.scrollHeight + "px";
                         if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
                         typingTimerRef.current = setTimeout(() => {
+                          console.log("[tt] send check", { hasTextInput: !!textInput, draftId: draftIdRef.current, val });
                           if (textInput && draftIdRef.current) send({ type:"text_typing", id:draftIdRef.current, x:textInput.wx, y:textInput.wy, text:val, font:FONTS[fontIdx].family, fontSize, color, bold, italic, align });
                         }, 300);
                       }}
@@ -5656,6 +5658,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                             ta.style.height = ta.scrollHeight + "px";
                             if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
                             typingTimerRef.current = setTimeout(() => {
+                              console.log("[tt] mobile send check", { hasTextInput: !!textInput, draftId: draftIdRef.current, val });
                               if (textInput && draftIdRef.current) send({ type:"text_typing", id:draftIdRef.current, x:textInput.wx, y:textInput.wy, text:val, font:FONTS[fontIdx].family, fontSize, color, bold, italic, align });
                             }, 300);
                           }}
