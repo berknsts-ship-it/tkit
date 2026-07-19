@@ -7,6 +7,9 @@ const ALLOWED: Record<string, string> = {
   png: "image/png", gif: "image/gif", webp: "image/webp",
   avif: "image/avif", heic: "image/heic", heif: "image/heif",
   mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+  avi: "video/x-msvideo", mkv: "video/x-matroska", m4v: "video/x-m4v",
+  mpeg: "video/mpeg", mpg: "video/mpeg", ogv: "video/ogg",
+  "3gp": "video/3gpp", wmv: "video/x-ms-wmv", flv: "video/x-flv",
   mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", wav: "audio/wav", aac: "audio/aac",
 };
 
