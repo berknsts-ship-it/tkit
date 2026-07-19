@@ -3,7 +3,6 @@
 import { useState, useRef } from "react";
 import WhiteboardCanvas, { WhiteboardRef } from "@/components/shared/WhiteboardCanvas";
 import type { BoardMaterial } from "@/components/shared/WhiteboardCanvas";
-import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { getSnapshotItems } from "@/app/actions/board";
 import { studentSubmitHomework, studentUnsubmitHomework } from "@/app/actions/homework";
@@ -156,7 +155,6 @@ export default function StudentCabinet({ studentId, student, subject, lessons, h
           {tab === "board" && (
             <>
               <WhiteboardCanvas key={boardRoomId} ref={canvasRef} roomId={boardRoomId} role="student" materials={materials} subjectProfile={subjectProfile} boardBg={boardBg} currentStudentId={studentId} myName={student.name} />
-              <SyncedAudio roomId={boardRoomId} role="student" />
               <SyncedVideo roomId={boardRoomId} role="student" />
             </>
           )}

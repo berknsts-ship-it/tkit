@@ -68,6 +68,12 @@ type VideoItem = {
   url: string;
   locked?: boolean; pdfPage?: number;
 };
+type AudioItem = {
+  type: "audio"; id: string;
+  x: number; y: number; w: number; h: number;
+  url: string; title: string;
+  locked?: boolean;
+};
 type DiceItem = {
   type: "dice"; id: string;
   x: number; y: number; w: number; h: number;
@@ -124,7 +130,7 @@ type CodeItem = {
   content: string; language: string;
   locked?: boolean;
 };
-type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | DiceItem | WheelItem | TableItem | FunctionItem | CardItem | FormulaItem | CodeItem;
+type DrawItem = PathItem | TextItem | ImageItem | ShapeItem | FrameItem | VideoItem | AudioItem | DiceItem | WheelItem | TableItem | FunctionItem | CardItem | FormulaItem | CodeItem;
 
 type WsEvent =
   | { type: "path-pt"; id: string; x: number; y: number; color: string; size: number; eraser: boolean; highlight: boolean }
@@ -140,6 +146,7 @@ type WsEvent =
   | { type: "goto";     zoom: number; panX: number; panY: number }
   | { type: "lock_all"; locked: boolean }
   | { type: "video_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number }
+  | { type: "audio_sync"; id: string; action: "play" | "pause" | "seek"; position: number; sentAt: number }
   | { type: "privacy_mode"; enabled: boolean }
   | { type: "reveal_all" }
   | { type: "hide_all" }
@@ -471,6 +478,7 @@ function itemBounds(item: DrawItem) {
   if (item.type === "card")     return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   if (item.type === "formula") return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   if (item.type === "code")    return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
+  if (item.type === "audio")   return { x0: item.x, y0: item.y, x1: item.x + item.w, y1: item.y + item.h };
   return item.type === "path" ? pathBounds(item) : textBounds(item as TextItem);
 }
 function hitTest(item: DrawItem, wx: number, wy: number): boolean {
@@ -502,6 +510,7 @@ function shiftItem(item: DrawItem, dx: number, dy: number): DrawItem {
   if (item.type === "card")     return { ...item, x: item.x + dx, y: item.y + dy };
   if (item.type === "formula") return { ...item, x: item.x + dx, y: item.y + dy };
   if (item.type === "code")    return { ...item, x: item.x + dx, y: item.y + dy };
+  if (item.type === "audio")   return { ...item, x: item.x + dx, y: item.y + dy };
   const ti = item as TextItem;
   return { ...ti, x: ti.x + dx, y: ti.y + dy };
 }
@@ -1048,6 +1057,29 @@ function renderItem(ctx: CanvasRenderingContext2D, item: DrawItem, zoom: number,
     if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
     return;
   }
+  if (item.type === "audio") {
+    ctx.save();
+    ctx.fillStyle = "#f0fdf4"; ctx.strokeStyle = "#86efac"; ctx.lineWidth = 1.5 / zoom;
+    ctx.beginPath();
+    const r = 8 / zoom;
+    ctx.moveTo(item.x + r, item.y); ctx.lineTo(item.x + item.w - r, item.y);
+    ctx.arcTo(item.x + item.w, item.y, item.x + item.w, item.y + r, r);
+    ctx.lineTo(item.x + item.w, item.y + item.h - r);
+    ctx.arcTo(item.x + item.w, item.y + item.h, item.x + item.w - r, item.y + item.h, r);
+    ctx.lineTo(item.x + r, item.y + item.h);
+    ctx.arcTo(item.x, item.y + item.h, item.x, item.y + item.h - r, r);
+    ctx.lineTo(item.x, item.y + r);
+    ctx.arcTo(item.x, item.y, item.x + r, item.y, r);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#16a34a";
+    ctx.font = `bold ${Math.round(16 / zoom)}px system-ui`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("♪", item.x + item.w / 2, item.y + item.h / 2);
+    if (item.locked) drawLockBadge(ctx, item.x + item.w - 14/zoom - 2/zoom, item.y + 2/zoom, zoom);
+    ctx.restore();
+    return;
+  }
   if (item.type === "dice" || item.type === "wheel") {
     ctx.save();
     ctx.strokeStyle = "#4a80f055"; ctx.lineWidth = 1;
@@ -1271,8 +1303,10 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [isMobile,    setIsMobile]    = useState(false);
   // video sync
   const videosRef         = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const audiosRef         = useRef<Map<string, HTMLAudioElement>>(new Map());
   const videoSeekTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [pendingVideoSync, setPendingVideoSync] = useState<Map<string, { position: number; sentAt: number }>>(new Map());
+  const [pendingAudioSync, setPendingAudioSync] = useState<Map<string, { position: number; sentAt: number }>>(new Map());
 
   // undo/redo
   type HistoryEntry =
@@ -1389,6 +1423,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   const [imgError,     setImgError]     = useState<string | null>(null);
   const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
   const [videoUploadError,    setVideoUploadError]    = useState<string | null>(null);
+  const [audioUploadProgress, setAudioUploadProgress] = useState<number | null>(null);
+  const [audioUploadError,    setAudioUploadError]    = useState<string | null>(null);
 
   // shape tool
   const [shapeKind,     setShapeKind]     = useState<ShapeKind>("rect");
@@ -2052,6 +2088,18 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         } else if (payload.action === "play") {
           if (vid) vid.currentTime = Math.max(0, payload.position);
           setPendingVideoSync(prev => { const m = new Map(prev); m.set(payload.id, { position: payload.position, sentAt: payload.sentAt }); return m; });
+        }
+        return;
+      }
+      if (payload.type === "audio_sync") {
+        const aud = audiosRef.current.get(payload.id);
+        if (payload.action === "pause") {
+          if (aud) { aud.currentTime = payload.position; aud.pause(); }
+        } else if (payload.action === "seek") {
+          if (aud) aud.currentTime = payload.position;
+        } else if (payload.action === "play") {
+          if (aud) aud.currentTime = Math.max(0, payload.position);
+          setPendingAudioSync(prev => { const m = new Map(prev); m.set(payload.id, { position: payload.position, sentAt: payload.sentAt }); return m; });
         }
         return;
       }
@@ -2958,6 +3006,56 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     }
   };
 
+
+  const addAudioToBoard = (url: string, title: string) => {
+    const { zoom, panX, panY } = viewRef.current;
+    const cv = canvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const cx = cv ? (cv.width / dpr / 2 - panX) / zoom : 400;
+    const cy = cv ? (cv.height / dpr / 2 - panY) / zoom : 300;
+    const w = 300, h = 64;
+    const item: AudioItem = {
+      type: "audio", id: uid(), url, title,
+      x: cx - w/2, y: cy - h/2, w, h,
+    };
+    itemsRef.current.push(item); render();
+    send({ type: "path", item }); pushHistory({ type: "add", item });
+  };
+
+  const uploadAndAddAudio = async (file: File) => {
+    setAudioUploadProgress(0);
+    setAudioUploadError(null);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp3";
+      const res = await fetch("/api/board/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ext }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAudioUploadError(err.error ?? "Ошибка подготовки загрузки");
+        setAudioUploadProgress(null); return;
+      }
+      const { signedUrl, publicUrl, contentType } = await res.json();
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setAudioUploadProgress(Math.round(e.loaded / e.total * 100));
+        };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`${xhr.status}`));
+        xhr.onerror = () => reject(new Error("Ошибка сети"));
+        xhr.open("PUT", signedUrl);
+        xhr.setRequestHeader("Content-Type", contentType);
+        xhr.send(file);
+      });
+      addAudioToBoard(publicUrl, file.name.replace(/\.[^.]+$/, ""));
+    } catch (err) {
+      setAudioUploadError(err instanceof Error ? err.message : "Ошибка загрузки");
+    } finally {
+      setAudioUploadProgress(null);
+    }
+  };
 
   const handleAiLayout = async (file: File) => {
     setAiLoading(true);
@@ -4131,6 +4229,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                       onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);uploadAndAddVideo(f);}}/>
                   </label>
                 )}
+                {/* Audio on board */}
+                {role==="tutor" && (
+                  <label className="flex flex-col items-center gap-1 p-2 rounded-xl border hover:opacity-70 cursor-pointer"
+                    style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                    <span className="text-xl">🎵</span><span className="text-xs">Аудио</span>
+                    <input type="file" accept="audio/*" className="hidden"
+                      onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);uploadAndAddAudio(f);}}/>
+                  </label>
+                )}
               </div>
             </div>
           )}
@@ -4897,6 +5004,94 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                       [isRight?"right":"left"]: -7, [isBottom?"bottom":"top"]: -7,
                       width:18, height:18, cursor:`${corner}-resize`, zIndex:32,
                       background:"white", border:"2px solid #4a80f0", borderRadius:3,
+                    }}
+                    onMouseDown={e => { e.stopPropagation(); startResize(e.clientX, e.clientY); }}
+                    onTouchStart={e => { e.stopPropagation(); e.preventDefault(); startResize(e.touches[0].clientX, e.touches[0].clientY); }}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {/* Audio overlays */}
+        {itemsRef.current.filter(it => it.type === "audio").map(it => {
+          const ai = it as AudioItem;
+          const sp = w2s(ai.x, ai.y);
+          const ep = w2s(ai.x + ai.w, ai.y + ai.h);
+          const sw = ep.x - sp.x, sh = ep.y - sp.y;
+          const selected = selectedId === ai.id || selectedIds.has(ai.id);
+          const locked = ai.locked;
+          const isDraggingThis = touchDragging && selectedId === ai.id;
+          return (
+            <div key={ai.id} className="absolute"
+              style={{ left: sp.x, top: sp.y, width: sw, height: sh, zIndex: 20,
+                visibility: isDraggingThis ? "hidden" : undefined }}
+              onMouseDown={e => {
+                e.stopPropagation();
+                setSelectedId(ai.id); setSelectedIds(new Set([ai.id]));
+                if (!ai.locked) {
+                  const { cx, cy } = clientXY(e);
+                  const wp = s2w(cx, cy);
+                  selDragRef.current = { mode: "move", id: ai.id, wx0: wp.x, wy0: wp.y, origItem: { ...ai } };
+                }
+              }}>
+              <div className="w-full h-full overflow-hidden relative flex items-center gap-2 px-3"
+                style={{ background: "#f0fdf4", border: `1.5px solid ${selected ? "#4a80f0" : "#86efac"}`, borderRadius: 8 }}>
+                <span style={{ fontSize: Math.max(14, sh * 0.35), flexShrink: 0 }}>♪</span>
+                <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+                  {sh > 44 && <span className="text-xs font-medium truncate" style={{ color: "#166534" }}>{ai.title}</span>}
+                  <audio
+                    src={ai.url}
+                    controls
+                    className="w-full"
+                    style={{ height: Math.min(sh - (sh > 44 ? 22 : 4), 36), minWidth: 0 }}
+                    ref={el => { if (el) audiosRef.current.set(ai.id, el); else audiosRef.current.delete(ai.id); }}
+                    onPlay={role === "tutor" ? e => {
+                      send({ type: "audio_sync", id: ai.id, action: "play", position: e.currentTarget.currentTime, sentAt: Date.now() });
+                    } : undefined}
+                    onPause={role === "tutor" ? e => {
+                      const a = e.currentTarget;
+                      if (!a.ended) send({ type: "audio_sync", id: ai.id, action: "pause", position: a.currentTime, sentAt: Date.now() });
+                    } : undefined}
+                    onSeeked={role === "tutor" ? e => {
+                      send({ type: "audio_sync", id: ai.id, action: "seek", position: e.currentTarget.currentTime, sentAt: Date.now() });
+                    } : undefined}
+                  />
+                </div>
+                {role === "student" && pendingAudioSync.has(ai.id) && (
+                  <button
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-1"
+                    style={{ background: "rgba(22,101,52,0.85)", color: "white", zIndex: 3, border: "none", cursor: "pointer", borderRadius: 8 }}
+                    onClick={() => {
+                      const p = pendingAudioSync.get(ai.id);
+                      if (!p) return;
+                      const aud = audiosRef.current.get(ai.id);
+                      if (aud) {
+                        aud.currentTime = Math.max(0, p.position + (Date.now() - p.sentAt) / 1000);
+                        aud.play().catch(() => {});
+                      }
+                      setPendingAudioSync(prev => { const m = new Map(prev); m.delete(ai.id); return m; });
+                    }}>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width={28} height={28}><path d="M8 5v14l11-7z"/></svg>
+                    <span style={{ fontSize: 11, fontWeight: 600 }}>Готов слушать</span>
+                  </button>
+                )}
+              </div>
+              {selected && !locked && !touchDragging && (["nw","ne","sw","se"] as const).map(corner => {
+                const isRight = corner.endsWith("e"), isBottom = corner.startsWith("s");
+                const startResize = (clientX: number, clientY: number) => {
+                  const rect = containerRef.current!.getBoundingClientRect();
+                  const ww = (clientX - rect.left - viewRef.current.panX) / viewRef.current.zoom;
+                  const wh = (clientY - rect.top  - viewRef.current.panY) / viewRef.current.zoom;
+                  selDragRef.current = { mode: "resize-img", id: ai.id, corner, wx0: ww, wy0: wh, origItem: { ...ai } };
+                };
+                return (
+                  <div key={corner} className="absolute pointer-events-auto"
+                    style={{
+                      [isRight?"right":"left"]: -7, [isBottom?"bottom":"top"]: -7,
+                      width: 18, height: 18, cursor: `${corner}-resize`, zIndex: 32,
+                      background: "white", border: "2px solid #4a80f0", borderRadius: 3,
                     }}
                     onMouseDown={e => { e.stopPropagation(); startResize(e.clientX, e.clientY); }}
                     onTouchStart={e => { e.stopPropagation(); e.preventDefault(); startResize(e.touches[0].clientX, e.touches[0].clientY); }}
@@ -5995,6 +6190,27 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
           </div>
         )}
 
+        {/* Audio upload progress */}
+        {(audioUploadProgress !== null || audioUploadError) && (
+          <div className="fixed bottom-20 left-1/2 z-[9000] -translate-x-1/2 rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 text-sm"
+            data-no-prevent style={{ background: audioUploadError ? "#fee2e2" : "#f0fdf4", border: `1px solid ${audioUploadError ? "#fca5a5" : "#86efac"}`, minWidth: 220 }}>
+            {audioUploadError ? (
+              <>
+                <span style={{ color: "#dc2626" }}>✕ {audioUploadError}</span>
+                <button onClick={() => setAudioUploadError(null)} style={{ color: "#dc2626", marginLeft: "auto" }}>✕</button>
+              </>
+            ) : (
+              <>
+                <span style={{ color: "#166534" }}>Загрузка аудио...</span>
+                <div className="flex-1 rounded-full overflow-hidden h-1.5" style={{ background: "#bbf7d0", minWidth: 80 }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${audioUploadProgress}%`, background: "#16a34a" }}/>
+                </div>
+                <span className="font-bold tabular-nums" style={{ color: "#166534" }}>{audioUploadProgress}%</span>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Flip overlay */}
         {flipOverlay && (() => {
           const fo = flipOverlay;
@@ -6707,6 +6923,14 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
                 <span className="text-lg">🎬</span><span className="text-xs">Видео</span>
                 <input type="file" accept="video/*" className="hidden"
                   onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);uploadAndAddVideo(f);}}/>
+              </label>
+            )}
+            {role==="tutor" && (
+              <label className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border shrink-0 cursor-pointer"
+                style={{ borderColor:"var(--brown-pale)", color:"var(--brown-dark)" }}>
+                <span className="text-lg">🎵</span><span className="text-xs">Аудио</span>
+                <input type="file" accept="audio/*" className="hidden"
+                  onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";setShowMoreTools(false);uploadAndAddAudio(f);}}/>
               </label>
             )}
           </div>

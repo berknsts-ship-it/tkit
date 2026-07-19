@@ -2,7 +2,6 @@
 
 import { useRef, useState, useTransition, useCallback, useEffect } from "react";
 import WhiteboardCanvas, { BoardMaterial, WhiteboardRef } from "@/components/shared/WhiteboardCanvas";
-import SyncedAudio from "@/components/shared/SyncedAudio";
 import SyncedVideo from "@/components/shared/SyncedVideo";
 import { saveSnapshot, deleteSnapshot, getSnapshotItems, renameSnapshot } from "@/app/actions/board";
 import { PenLine, Globe, BookOpen, Save, Trash2, Download, Plus, ChevronRight, GitMerge, Check, Pencil, Maximize2, Minimize2 } from "lucide-react";
@@ -238,7 +237,6 @@ export default function BoardView({
             <div ref={canvasDivRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative" style={{ minHeight: "40vh" }}>
               <WhiteboardCanvas ref={canvasRef} roomId={roomId} role="tutor" materials={materials} students={groupStudents} fullscreen={fullscreen} subjectProfile={subjectProfile} boardBg={boardBg} studentName={studentName} myName={tutorName} />
             </div>
-            <SyncedAudio roomId={roomId} role="tutor" />
             <SyncedVideo roomId={roomId} role="tutor" />
           </div>
 
