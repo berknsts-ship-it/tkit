@@ -984,35 +984,26 @@ function drawCard(ctx: CanvasRenderingContext2D, item: CardItem, zoom: number) {
   ctx.lineTo(-w/2 + r, h/2); ctx.arcTo(-w/2, h/2, -w/2, h/2 - r, r);
   ctx.lineTo(-w/2, -h/2 + r); ctx.arcTo(-w/2, -h/2, -w/2 + r, -h/2, r);
   ctx.closePath();
-  ctx.fillStyle = "white";
+  // hidden=true → question/word side (warm); hidden=false → answer/translation side (cool blue)
+  ctx.fillStyle = hidden ? "#fffdf7" : "#f0f5ff";
   ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.strokeStyle = hidden ? "rgba(124,92,62,0.25)" : "rgba(74,128,240,0.3)";
   ctx.lineWidth = 1 / zoom;
   ctx.stroke();
+  const maxLen = 22;
+  const displayText = hidden ? word : translation;
+  const txt = displayText.length > maxLen ? displayText.slice(0, maxLen) + "…" : displayText;
+  ctx.fillStyle = hidden ? "#3b2a1a" : "#1a3c8a";
+  ctx.font = `bold ${Math.round(12 / zoom)}px system-ui, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(txt, 0, 0);
+  // Speaker icon on question side only
   if (hidden) {
-    ctx.fillStyle = "var(--brown-light, #b8956a)";
-    ctx.font = `bold ${Math.round(22 / zoom)}px serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("✦", 0, 0);
-  } else {
-    const maxLen = 18;
-    const wordTxt = word.length > maxLen ? word.slice(0, maxLen) + "…" : word;
-    const transTxt = translation.length > maxLen ? translation.slice(0, maxLen) + "…" : translation;
-    ctx.fillStyle = "#3b2a1a";
-    ctx.font = `bold ${Math.round(11 / zoom)}px system-ui, sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(wordTxt, 0, -h * 0.18);
-    ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 0.5 / zoom;
-    ctx.beginPath(); ctx.moveTo(-w * 0.35, 0); ctx.lineTo(w * 0.35, 0); ctx.stroke();
-    ctx.fillStyle = "#7c5c3e";
-    ctx.font = `${Math.round(10 / zoom)}px system-ui, sans-serif`;
-    ctx.fillText(transTxt, 0, h * 0.22);
+    ctx.fillStyle = "rgba(180,149,106,0.7)";
+    ctx.font = `${Math.round(9 / zoom)}px sans-serif`;
+    ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+    ctx.fillText("🔊", w / 2 - 3 / zoom, h / 2 - 2 / zoom);
   }
-  // Speaker icon
-  ctx.fillStyle = "rgba(180,149,106,0.7)";
-  ctx.font = `${Math.round(9 / zoom)}px sans-serif`;
-  ctx.textAlign = "right"; ctx.textBaseline = "bottom";
-  ctx.fillText("🔊", w / 2 - 3 / zoom, h / 2 - 2 / zoom);
   ctx.restore();
 }
 
@@ -6936,24 +6927,28 @@ function FlipCard({ sx, sy, sw, sh, rotation, word, translation, fromHidden }:
         transform:`rotateY(${deg}deg)`, transition:"transform 0.35s ease",
         transformStyle:"preserve-3d", position:"relative",
       }}>
-        {/* Front (hidden face) */}
+        {/* Front — what was visible before the flip */}
         <div style={{
           position:"absolute", inset:0, backfaceVisibility:"hidden",
-          background:"white", borderRadius:8, border:"1px solid rgba(0,0,0,0.12)",
-          display:"flex", alignItems:"center", justifyContent:"center",
+          background: fromHidden ? "#fffdf7" : "#f0f5ff",
+          borderRadius:8, border: fromHidden ? "1px solid rgba(124,92,62,0.25)" : "1px solid rgba(74,128,240,0.3)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:"6px 8px",
         }}>
-          <span style={{ fontSize:"1.4rem", color:"var(--brown-light,#b8956a)" }}>✦</span>
+          <span style={{ fontSize:"0.78rem", fontWeight:700, color: fromHidden ? "#3b2a1a" : "#1a3c8a", textAlign:"center" }}>
+            {fromHidden ? word : translation}
+          </span>
         </div>
-        {/* Back (visible face) */}
+        {/* Back — what becomes visible after the flip */}
         <div style={{
           position:"absolute", inset:0, backfaceVisibility:"hidden",
           transform:"rotateY(180deg)",
-          background:"white", borderRadius:8, border:"1px solid rgba(0,0,0,0.12)",
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, padding:"6px 8px",
+          background: fromHidden ? "#f0f5ff" : "#fffdf7",
+          borderRadius:8, border: fromHidden ? "1px solid rgba(74,128,240,0.3)" : "1px solid rgba(124,92,62,0.25)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:"6px 8px",
         }}>
-          <span style={{ fontSize:"0.75rem", fontWeight:700, color:"#3b2a1a", textAlign:"center" }}>{word}</span>
-          <div style={{ width:"70%", height:1, background:"rgba(0,0,0,0.1)" }}/>
-          <span style={{ fontSize:"0.7rem", color:"#7c5c3e", textAlign:"center" }}>{translation}</span>
+          <span style={{ fontSize:"0.78rem", fontWeight:700, color: fromHidden ? "#1a3c8a" : "#3b2a1a", textAlign:"center" }}>
+            {fromHidden ? translation : word}
+          </span>
         </div>
       </div>
     </div>
