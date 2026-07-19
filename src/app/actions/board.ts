@@ -95,35 +95,39 @@ export async function renameSnapshot(id: string, title: string) {
   if (error) return { error: "Не удалось переименовать" };
 }
 
-export async function saveBoardState(studentId: string, items: unknown[]) {
+export async function saveBoardState(roomId: string, items: unknown[]) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  // If authenticated tutor, verify they own this student
   if (user) {
-    const { data: student } = await supabase
-      .from("students").select("id").eq("id", studentId).eq("tutor_id", user.id).single();
-    if (!student) return { error: "Доступ запрещён" };
+    // roomId can be a student_id or group_id — accept either owned by this tutor
+    const [{ data: student }, { data: group }] = await Promise.all([
+      supabase.from("students").select("id").eq("id", roomId).eq("tutor_id", user.id).maybeSingle(),
+      supabase.from("groups").select("id").eq("id", roomId).eq("tutor_id", user.id).maybeSingle(),
+    ]);
+    if (!student && !group) return { error: "Доступ запрещён" };
   }
   const db = createAdminClient();
   await db.from("boards").upsert(
-    { student_id: studentId, data: { items }, updated_at: new Date().toISOString() },
+    { student_id: roomId, data: { items }, updated_at: new Date().toISOString() },
     { onConflict: "student_id" }
   );
 }
 
-export async function loadBoardState(studentId: string): Promise<unknown[]> {
+export async function loadBoardState(roomId: string): Promise<unknown[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (user) {
-    const { data: student } = await supabase
-      .from("students").select("id").eq("id", studentId).eq("tutor_id", user.id).single();
-    if (!student) return [];
+    const [{ data: student }, { data: group }] = await Promise.all([
+      supabase.from("students").select("id").eq("id", roomId).eq("tutor_id", user.id).maybeSingle(),
+      supabase.from("groups").select("id").eq("id", roomId).eq("tutor_id", user.id).maybeSingle(),
+    ]);
+    if (!student && !group) return [];
   }
   const db = createAdminClient();
   const { data } = await db
     .from("boards")
     .select("data")
-    .eq("student_id", studentId)
+    .eq("student_id", roomId)
     .single();
   return (data?.data as { items: unknown[] } | null)?.items ?? [];
 }
