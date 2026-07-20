@@ -23,18 +23,17 @@ const systemPrompts: Record<string, string> = {
 Одна-две фразы максимум. Только подсказку, без вступлений.`,
 
   vocabulary_set: `Ты помощник репетитора. Создай набор словарных карточек по запросу пользователя.
-Верни ТОЛЬКО валидный JSON-массив без markdown и без объяснений:
+Верни ТОЛЬКО валидный JSON-массив. БЕЗ markdown, БЕЗ \`\`\`, БЕЗ объяснений. Первый символ — [
 [{"word":"...","translation":"...","example":"..."}]
 
 Правила:
 - word: слово или фраза на изучаемом языке
 - translation: перевод на русский
 - example: короткое живое предложение с этим словом (на языке оригинала)
-- 6–12 карточек если не указано количество
-- Только JSON, никакого текста вокруг`,
+- 6–12 карточек если не указано количество`,
 
   trainer_cards: `Ты помощник репетитора. Создай набор учебных карточек для тренажёра по описанию пользователя.
-Верни ТОЛЬКО валидный JSON-массив без markdown и без объяснений.
+Верни ТОЛЬКО валидный JSON-массив. БЕЗ markdown, БЕЗ \`\`\`, БЕЗ объяснений. Первый символ — [
 
 Типы карточек:
 - flashcard: вопрос или термин (front) → ответ или определение (back). options: []
@@ -50,8 +49,7 @@ const systemPrompts: Record<string, string> = {
 - 6–12 карточек если не указано иное
 - Если пользователь указал конкретный тип — создай только его
 - front и back — короткие и ёмкие, без лишних слов
-- Для definition: options — строго 3 неверных варианта, правдоподобных но отличных от правильного
-- Только JSON, никакого текста вокруг`,
+- Для definition: options — строго 3 неверных варианта`,
 };
 
 export async function POST(req: NextRequest) {
@@ -64,14 +62,26 @@ export async function POST(req: NextRequest) {
   const system = systemPrompts[mode] ?? systemPrompts.reference;
   const maxTokens = mode === "trainer_cards" ? 1800 : mode === "vocabulary_set" ? 1000 : mode === "reference" ? 1000 : 400;
 
+  const isJsonMode = mode === "vocabulary_set" || mode === "trainer_cards";
+
   try {
-    const text = await gigachatComplete(
+    let text = await gigachatComplete(
       [
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
       { model: "GigaChat-Pro", maxTokens, temperature: 0.6 }
     );
+
+    if (isJsonMode) {
+      console.log("[ai] raw:", text.slice(0, 300));
+      // Strip markdown wrappers
+      text = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const start = text.indexOf("[");
+      const end = text.lastIndexOf("]");
+      if (start !== -1 && end > start) text = text.slice(start, end + 1);
+    }
+
     return NextResponse.json({ text, remaining: usage.remaining });
   } catch (e) {
     console.error("[ai]", e);

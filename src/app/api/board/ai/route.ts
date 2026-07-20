@@ -102,6 +102,17 @@ fontSize карточек: 18 для коротких слов, 15 для фра
 
 function makeId() { return Math.random().toString(36).slice(2, 10); }
 
+// Strip markdown wrappers and extract JSON array/object from GigaChat response
+function extractJson(raw: string): string {
+  // Remove ```json ... ``` or ``` ... ``` blocks
+  let s = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  // Find outermost [ ... ] array
+  const start = s.indexOf("[");
+  const end = s.lastIndexOf("]");
+  if (start !== -1 && end > start) return s.slice(start, end + 1);
+  return s;
+}
+
 export async function POST(req: NextRequest) {
   const usage = await consumeAiRequest();
   if (!usage.ok) return NextResponse.json({ error: usage.error }, { status: 429 });
@@ -123,22 +134,48 @@ ${existingCount === 0
     : "Размести рядом с существующим контентом (сдвинь вправо или вниз от anchor на 400-600px)."}
 
 Определи предмет из запроса и выбери наиболее подходящий паттерн задания (A/B/C/D/E/F/G).
-Создай содержательное интерактивное задание с реальным учебным материалом по теме.`;
+Создай содержательное интерактивное задание с реальным учебным материалом по теме.
+
+ВАЖНО: верни ТОЛЬКО JSON-массив. БЕЗ markdown, БЕЗ \`\`\`, БЕЗ объяснений. Первый символ ответа — [`;
+
+  const messages = [
+    { role: "system", content: SYSTEM },
+    { role: "user", content: userMessage },
+  ] as const;
+
+  async function tryParse(raw: string) {
+    console.log("[board/ai] raw:", raw.slice(0, 300));
+    const json = extractJson(raw);
+    const items = JSON.parse(json);
+    if (!Array.isArray(items)) throw new Error("not an array");
+    return items;
+  }
 
   try {
     const raw = await gigachatComplete(
-      [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: userMessage },
-      ],
+      [...messages],
       { model: "GigaChat-Pro", maxTokens: 2500, temperature: 0.5 }
     );
 
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return NextResponse.json({ error: "Нет JSON в ответе", raw }, { status: 500 });
+    let items: Record<string, unknown>[];
+    try {
+      items = await tryParse(raw);
+    } catch {
+      // Retry with explicit correction
+      console.log("[board/ai] parse failed, retrying");
+      const raw2 = await gigachatComplete(
+        [
+          ...messages,
+          { role: "assistant", content: raw },
+          { role: "user", content: "Ответ должен быть ТОЛЬКО JSON-массивом. Верни его снова — без пояснений, без markdown, только [ ... ]" },
+        ],
+        { model: "GigaChat-Pro", maxTokens: 2500, temperature: 0.2 }
+      );
+      console.log("[board/ai] retry raw:", raw2.slice(0, 300));
+      items = await tryParse(raw2);
+    }
 
-    const items = JSON.parse(match[0]);
-    const withIds = items.map((it: Record<string, unknown>) => ({ ...it, id: makeId() }));
+    const withIds = items.map((it) => ({ ...it, id: makeId() }));
     return NextResponse.json({ items: withIds });
   } catch (e) {
     console.error("[board/ai]", e);
