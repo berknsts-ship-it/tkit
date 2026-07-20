@@ -1,26 +1,7 @@
 import https from "node:https";
-import tls from "node:tls";
-import fs from "node:fs";
-import path from "node:path";
 
-// Default Node.js trusted CAs + Russian Mintsifry CA
-// Passing only the Russian cert replaces ALL defaults — we must merge both.
-let _cas: string[] | undefined;
-
-function getCAs(): string[] {
-  if (_cas) return _cas;
-  const defaults = tls.rootCertificates;
-  try {
-    const ruCert = fs.readFileSync(
-      path.join(process.cwd(), "certs", "russian_trusted_root_ca.cer"),
-      "utf8"
-    );
-    _cas = [...defaults, ruCert];
-  } catch {
-    _cas = [...defaults];
-  }
-  return _cas;
-}
+// GigaChat (Sberbank) uses Russian government certificates.
+// Trusted via NODE_EXTRA_CA_CERTS=/etc/ssl/certs/russian_trusted_bundle.pem in pm2 env.
 
 type JsonResponse = { ok: boolean; status: number; json<T = unknown>(): Promise<T> };
 
@@ -37,7 +18,6 @@ function httpsPost(url: string, headers: Record<string, string>, body: string | 
         path: u.pathname + u.search,
         method: "POST",
         headers: { ...headers, "Content-Length": bodyBuf.length },
-        ca: getCAs(),
       },
       (res) => {
         const chunks: Buffer[] = [];
