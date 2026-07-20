@@ -102,11 +102,11 @@ fontSize карточек: 18 для коротких слов, 15 для фра
 
 function makeId() { return Math.random().toString(36).slice(2, 10); }
 
-// Strip markdown wrappers and extract JSON array/object from GigaChat response
+// Strip markdown wrappers, fix GigaChat artifacts, extract JSON array
 function extractJson(raw: string): string {
-  // Remove ```json ... ``` or ``` ... ``` blocks
   let s = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-  // Find outermost [ ... ] array
+  // Fix GigaChat double-quote artifact: "value."" → "value."
+  s = s.replace(/""\s*([,}\]])/g, '"$1');
   const start = s.indexOf("[");
   const end = s.lastIndexOf("]");
   if (start !== -1 && end > start) return s.slice(start, end + 1);

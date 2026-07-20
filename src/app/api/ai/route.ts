@@ -75,8 +75,9 @@ export async function POST(req: NextRequest) {
 
     if (isJsonMode) {
       console.log("[ai] raw:", text.slice(0, 300));
-      // Strip markdown wrappers
       text = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      // Fix GigaChat double-quote artifact: "value."" → "value."
+      text = text.replace(/""\s*([,}\]])/g, '"$1');
       const start = text.indexOf("[");
       const end = text.lastIndexOf("]");
       if (start !== -1 && end > start) text = text.slice(start, end + 1);
