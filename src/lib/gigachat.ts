@@ -1,7 +1,26 @@
 import https from "node:https";
+import tls from "node:tls";
+import fs from "node:fs";
+import path from "node:path";
 
-// GigaChat (Sberbank) uses Russian government certificates.
-// Trusted via NODE_EXTRA_CA_CERTS=/etc/ssl/certs/russian_trusted_bundle.pem in pm2 env.
+// GigaChat (Sberbank) uses Russian government certificates not in Node.js defaults.
+// We merge tls.rootCertificates with the root+sub CA bundle.
+let _cas: string[] | undefined;
+function getCAs(): string[] {
+  if (_cas) return _cas;
+  const defaults = [...tls.rootCertificates];
+  for (const p of [
+    path.join(process.cwd(), "certs", "russian_trusted_bundle.pem"),
+    "/etc/ssl/certs/russian_trusted_bundle.pem",
+  ]) {
+    try {
+      defaults.push(fs.readFileSync(p, "utf8"));
+      break;
+    } catch { /* try next */ }
+  }
+  _cas = defaults;
+  return _cas;
+}
 
 type JsonResponse = { ok: boolean; status: number; json<T = unknown>(): Promise<T> };
 
@@ -10,7 +29,6 @@ function httpsPost(url: string, headers: Record<string, string>, body: string | 
     const u = new URL(url);
     const bodyBuf = typeof body === "string" ? Buffer.from(body, "utf8") : body;
 
-
     const req = https.request(
       {
         hostname: u.hostname,
@@ -18,6 +36,7 @@ function httpsPost(url: string, headers: Record<string, string>, body: string | 
         path: u.pathname + u.search,
         method: "POST",
         headers: { ...headers, "Content-Length": bodyBuf.length },
+        ca: getCAs(),
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -64,7 +83,7 @@ async function getAccessToken(): Promise<string> {
 
   const data = await res.json<{ access_token: string; expires_at: number }>();
   _token = data.access_token;
-  _tokenExpiry = Date.now() + 25 * 60 * 1000; // 25 min regardless of expires_at
+  _tokenExpiry = Date.now() + 25 * 60 * 1000;
   return _token;
 }
 
