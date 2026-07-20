@@ -3903,25 +3903,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
     setVocabLoading(true);
     try {
       const supabase = createClient();
-      let query = supabase
+      const { data } = await supabase
         .from("vocabulary_topics")
-        .select("id, title, vocabulary_words(id, word, translation)");
-      if (role === "tutor") {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          query = query.or(`student_id.eq.${roomId},tutor_id.eq.${user.id}`);
-        } else {
-          query = query.eq("student_id", roomId);
-        }
-      } else {
-        query = query.eq("student_id", roomId);
-      }
-      const { data } = await query.order("created_at", { ascending: false });
+        .select("id, title, vocabulary_words(id, word, translation)")
+        .order("created_at", { ascending: false });
       const mapped: VocabTopic[] = (data ?? []).map((t: {id:string;title:string;vocabulary_words:{id:string;word:string;translation:string}[]}) => ({ id: t.id, title: t.title, words: t.vocabulary_words }));
       setVocabTopics(mapped);
       if (mapped[0]) setVocabTopicId(mapped[0].id);
     } finally { setVocabLoading(false); }
-  }, [roomId, role]);
+  }, []);
 
   const addCardsToBoard = useCallback(() => {
     const topic = vocabTopics.find(t => t.id === vocabTopicId);
