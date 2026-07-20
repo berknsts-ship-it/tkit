@@ -1,18 +1,25 @@
 import https from "node:https";
+import tls from "node:tls";
 import fs from "node:fs";
 import path from "node:path";
 
-// Russian Ministry of Digital Development CA cert
-// Download: curl -o certs/russian_trusted_root_ca.cer https://gu-st.ru/content/Other/doc/russian_trusted_root_ca_2022.cer
-let _ca: Buffer | undefined;
-function getCA(): Buffer | undefined {
-  if (_ca !== undefined) return _ca.length ? _ca : undefined;
+// Default Node.js trusted CAs + Russian Mintsifry CA
+// Passing only the Russian cert replaces ALL defaults — we must merge both.
+let _cas: string[] | undefined;
+
+function getCAs(): string[] {
+  if (_cas) return _cas;
+  const defaults = tls.rootCertificates;
   try {
-    _ca = fs.readFileSync(path.join(process.cwd(), "certs", "russian_trusted_root_ca.cer"));
+    const ruCert = fs.readFileSync(
+      path.join(process.cwd(), "certs", "russian_trusted_root_ca.cer"),
+      "utf8"
+    );
+    _cas = [...defaults, ruCert];
   } catch {
-    _ca = Buffer.alloc(0);
+    _cas = [...defaults];
   }
-  return _ca.length ? _ca : undefined;
+  return _cas;
 }
 
 type JsonResponse = { ok: boolean; status: number; json<T = unknown>(): Promise<T> };
@@ -21,7 +28,7 @@ function httpsPost(url: string, headers: Record<string, string>, body: string | 
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const bodyBuf = typeof body === "string" ? Buffer.from(body, "utf8") : body;
-    const ca = getCA();
+
 
     const req = https.request(
       {
@@ -30,7 +37,7 @@ function httpsPost(url: string, headers: Record<string, string>, body: string | 
         path: u.pathname + u.search,
         method: "POST",
         headers: { ...headers, "Content-Length": bodyBuf.length },
-        ...(ca ? { ca } : {}),
+        ca: getCAs(),
       },
       (res) => {
         const chunks: Buffer[] = [];
