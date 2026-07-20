@@ -5,6 +5,7 @@ import TutorNav from "@/components/tutor/TutorNav";
 import TutorBackground from "@/components/tutor/TutorBackground";
 import { isCreator, getCreatorViewAs, getCreatorSubject } from "@/lib/creatorMode";
 import { clearViewAs } from "@/app/actions/creator";
+import { getUnreadSupportCount } from "@/app/actions/support";
 import { getThemeKey, THEMES } from "@/lib/themes";
 import type { CSSProperties } from "react";
 
@@ -32,6 +33,9 @@ export default async function TutorLayout({ children }: { children: React.ReactN
 
   const creatorSubject = isCreator(user.email) ? await getCreatorSubject() : null;
   const effectiveSubject = creatorSubject ?? tutor?.subject;
+
+  // Only show unread badge for real tutor (not creator viewing as tutor)
+  const unreadSupportCount = viewingAs ? 0 : await getUnreadSupportCount(user.id);
   const themeKey = getThemeKey(effectiveSubject);
   const t = THEMES[themeKey];
 
@@ -67,7 +71,7 @@ export default async function TutorLayout({ children }: { children: React.ReactN
         </div>
       )}
 
-      <TutorNav tutorName={tutor?.name ?? user.email ?? "Репетитор"} isPro={!!isPro} isCreatorUser={isCreator(user.email)} subject={effectiveSubject} subjectOverride={creatorSubject} />
+      <TutorNav tutorName={tutor?.name ?? user.email ?? "Репетитор"} isPro={!!isPro} isCreatorUser={isCreator(user.email)} subject={effectiveSubject} subjectOverride={creatorSubject} unreadSupportCount={unreadSupportCount} />
 
       <main className="relative z-10 flex-1 max-w-5xl mx-auto w-full px-4 py-6">
         {children}

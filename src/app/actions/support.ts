@@ -88,9 +88,36 @@ export async function getTutorSupportMessages() {
   const admin = createAdminClient();
   const { data } = await admin
     .from("support_messages")
-    .select("id, message, created_at, reply_text, replied_at, screenshots")
+    .select("id, message, created_at, reply_text, replied_at, tutor_read_at, screenshots")
     .eq("tutor_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
   return data ?? [];
+}
+
+// Tutor: mark all replied messages as read
+export async function markAllSupportRepliesRead() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const admin = createAdminClient();
+  await admin
+    .from("support_messages")
+    .update({ tutor_read_at: new Date().toISOString() })
+    .eq("tutor_id", user.id)
+    .not("reply_text", "is", null)
+    .is("tutor_read_at", null);
+}
+
+// Tutor: count unread replies (has reply_text but no tutor_read_at)
+export async function getUnreadSupportCount(tutorId: string) {
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("support_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("tutor_id", tutorId)
+    .not("reply_text", "is", null)
+    .is("tutor_read_at", null);
+  return count ?? 0;
 }

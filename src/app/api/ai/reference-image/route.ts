@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeAiRequest } from "@/lib/aiUsage";
-
-const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
+import { gigachatComplete } from "@/lib/gigachat";
 
 const SYSTEM = `Ты помощник репетитора. Тебе показывают скриншот учебного материала — страницу учебника, конспект, фото с доски, таблицу и т.д.
 Выполни точно то, о чём просит репетитор: адаптируй, перепиши, структурируй или оформи материал из изображения.
@@ -34,15 +33,9 @@ export async function POST(req: NextRequest) {
     ? prompt
     : "Распознай и структурируй учебный материал с этого скриншота. Оформи в виде удобной шпаргалки.";
 
-  const res = await fetch(GROQ_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [
+  try {
+    const text = await gigachatComplete(
+      [
         { role: "system", content: SYSTEM },
         {
           role: "user",
@@ -52,22 +45,11 @@ export async function POST(req: NextRequest) {
           ],
         },
       ],
-      max_tokens: 1500,
-      temperature: 0.4,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: "" } }));
-    const msg = (err?.error?.message as string) ?? "";
-    const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
-    const friendly = m
-      ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек. и попробуйте снова.`
-      : "Ошибка ИИ. Попробуйте ещё раз.";
-    return NextResponse.json({ error: friendly }, { status: res.status });
+      { model: "GigaChat-Pro", maxTokens: 1500, temperature: 0.4 }
+    );
+    return NextResponse.json({ text, remaining: usage.remaining });
+  } catch (e) {
+    console.error("[ai/reference-image]", e);
+    return NextResponse.json({ error: "AI временно недоступен. Попробуйте позже." }, { status: 503 });
   }
-
-  const data = await res.json();
-  const text = (data.choices?.[0]?.message?.content ?? "").trim();
-  return NextResponse.json({ text, remaining: usage.remaining });
 }

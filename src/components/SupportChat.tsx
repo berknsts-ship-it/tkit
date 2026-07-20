@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, CheckCircle, Paperclip, ChevronLeft } from "lucide-react";
-import { submitSupportMessage, getTutorSupportMessages } from "@/app/actions/support";
+import { MessageCircle, X, Send, CheckCircle, Paperclip } from "lucide-react";
+import { submitSupportMessage, getTutorSupportMessages, markAllSupportRepliesRead } from "@/app/actions/support";
 
 type SupportMsg = {
   id: string;
@@ -10,6 +10,7 @@ type SupportMsg = {
   created_at: string;
   reply_text?: string | null;
   replied_at?: string | null;
+  tutor_read_at?: string | null;
   screenshots?: string[] | null;
 };
 
@@ -32,6 +33,9 @@ function SupportPopup({ onClose }: { onClose: () => void }) {
     const msgs = await getTutorSupportMessages();
     setHistory(msgs as SupportMsg[]);
     setHistoryLoading(false);
+    // Mark all replied messages as read when thread is viewed
+    const hasUnreadNow = (msgs as SupportMsg[]).some(m => m.reply_text && !m.tutor_read_at);
+    if (hasUnreadNow) markAllSupportRepliesRead();
   };
 
   useEffect(() => {
@@ -74,7 +78,7 @@ function SupportPopup({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const hasUnread = history?.some(m => m.reply_text && !m.replied_at) ?? false;
+  const hasUnread = history?.some(m => m.reply_text && !m.tutor_read_at) ?? false;
 
   return (
     <div className="w-80 rounded-2xl border overflow-hidden"
@@ -234,12 +238,20 @@ function SupportPopup({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SupportChatButton({ dropUp = false, alignLeft = false }: { dropUp?: boolean; alignLeft?: boolean }) {
+export function SupportChatButton({ dropUp = false, alignLeft = false, unreadCount = 0 }: { dropUp?: boolean; alignLeft?: boolean; unreadCount?: number }) {
   const [open, setOpen] = useState(false);
+  const [localUnread, setLocalUnread] = useState(unreadCount);
+
+  const handleOpen = () => {
+    setOpen(v => !v);
+    // Clear badge optimistically when opening
+    if (!open) setLocalUnread(0);
+  };
+
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={handleOpen}
         title="Написать в поддержку"
         className="w-8 h-8 rounded-lg flex items-center justify-center border transition-all hover:opacity-80"
         style={{
@@ -250,6 +262,12 @@ export function SupportChatButton({ dropUp = false, alignLeft = false }: { dropU
         aria-label="Поддержка">
         <MessageCircle size={15} />
       </button>
+      {localUnread > 0 && (
+        <span className="pointer-events-none absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full flex items-center justify-center text-white"
+          style={{ background: "#e03030", fontSize: 9, fontWeight: 700, padding: "0 3px", lineHeight: 1 }}>
+          {localUnread > 9 ? "9+" : localUnread}
+        </span>
+      )}
       {open && (
         <div className={`absolute z-[200] ${alignLeft ? "left-0" : "right-0"} ${dropUp ? "bottom-full mb-2" : "top-full mt-2"}`}>
           <SupportPopup onClose={() => setOpen(false)} />

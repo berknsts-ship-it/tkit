@@ -30,8 +30,8 @@ const navLinks = [
   { href: "/tutor/vocabulary",     label: "Словарь",    proOnly: true, languageOnly: true },
 ];
 
-export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, subjectOverride }: {
-  tutorName: string; isPro: boolean; isCreatorUser?: boolean; subject?: string | null; subjectOverride?: string | null;
+export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, subjectOverride, unreadSupportCount = 0 }: {
+  tutorName: string; isPro: boolean; isCreatorUser?: boolean; subject?: string | null; subjectOverride?: string | null; unreadSupportCount?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -113,7 +113,7 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, sub
                 PRO
               </Link>
             )}
-            <SupportChatButton />
+            <SupportChatButton unreadCount={unreadSupportCount} />
             <span className="text-sm max-w-[120px] truncate" style={{ color: "var(--brown-mid)" }}>{tutorName}</span>
             <button onClick={handleSignOut}
               className="text-sm px-3 py-1 rounded-lg border transition-all hover:opacity-70"
@@ -165,7 +165,7 @@ export default function TutorNav({ tutorName, isPro, isCreatorUser, subject, sub
           <div className="border-t px-4 flex items-center justify-between"
             style={{ borderColor: "var(--brown-pale)", paddingTop: 16, paddingBottom: "calc(16px + env(safe-area-inset-bottom))" }}>
             <div className="flex items-center gap-3">
-              <SupportChatButton dropUp alignLeft />
+              <SupportChatButton dropUp alignLeft unreadCount={unreadSupportCount} />
               <span className="text-sm" style={{ color: "var(--brown-mid)" }}>{tutorName}</span>
             </div>
             <button onClick={handleSignOut}

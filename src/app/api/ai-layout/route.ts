@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
+import { gigachatComplete } from "@/lib/gigachat";
 
 const SYSTEM = `You are an educational whiteboard layout assistant for a tutoring platform. Analyze screenshots of educational materials and create structured interactive whiteboard layouts.
 
@@ -43,15 +42,9 @@ export async function POST(req: NextRequest) {
   const base64 = Buffer.from(buffer).toString("base64");
   const mimeType = file.type || "image/jpeg";
 
-  const res = await fetch(GROQ_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.2-90b-vision-preview",
-      messages: [
+  try {
+    const raw = await gigachatComplete(
+      [
         { role: "system", content: SYSTEM },
         {
           role: "user",
@@ -67,35 +60,23 @@ export async function POST(req: NextRequest) {
           ],
         },
       ],
-      max_tokens: 4096,
-      temperature: 0.2,
-    }),
-  });
+      { model: "GigaChat-Pro", maxTokens: 4096, temperature: 0.2 }
+    );
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: "" } }));
-    const msg = (err?.error?.message as string) ?? "";
-    const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
-    const friendly = m
-      ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек.`
-      : "Слишком много запросов. Попробуйте позже.";
-    return NextResponse.json({ error: friendly }, { status: res.status });
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return NextResponse.json({ error: "No JSON in response", raw }, { status: 500 });
+
+    let items;
+    try {
+      items = JSON.parse(match[0]);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON", raw }, { status: 500 });
+    }
+
+    if (!Array.isArray(items)) return NextResponse.json({ error: "Not an array", raw }, { status: 500 });
+    return NextResponse.json({ items });
+  } catch (e) {
+    console.error("[ai-layout]", e);
+    return NextResponse.json({ error: "AI временно недоступен." }, { status: 503 });
   }
-
-  const data = await res.json();
-  const raw = (data.choices?.[0]?.message?.content ?? "").trim();
-
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) return NextResponse.json({ error: "No JSON in response", raw }, { status: 500 });
-
-  let items;
-  try {
-    items = JSON.parse(match[0]);
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON", raw }, { status: 500 });
-  }
-
-  if (!Array.isArray(items)) return NextResponse.json({ error: "Not an array", raw }, { status: 500 });
-
-  return NextResponse.json({ items });
 }

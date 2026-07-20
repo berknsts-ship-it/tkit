@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeAiRequest } from "@/lib/aiUsage";
-
-const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
-
-function rateLimitMessage(msg: string): string {
-  const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
-  return m
-    ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек. и попробуйте снова.`
-    : "Слишком много запросов. Подождите немного и попробуйте снова.";
-}
+import { gigachatComplete } from "@/lib/gigachat";
 
 const SYSTEM = `Ты помощник репетитора любого предмета. Создаёшь ИНТЕРАКТИВНЫЕ задания для доски — ученик перетаскивает карточки мышкой.
 
@@ -133,40 +125,23 @@ ${existingCount === 0
 Определи предмет из запроса и выбери наиболее подходящий паттерн задания (A/B/C/D/E/F/G).
 Создай содержательное интерактивное задание с реальным учебным материалом по теме.`;
 
-  const res = await fetch(GROQ_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
+  try {
+    const raw = await gigachatComplete(
+      [
         { role: "system", content: SYSTEM },
         { role: "user", content: userMessage },
       ],
-      max_tokens: 2500,
-      temperature: 0.5,
-    }),
-  });
+      { model: "GigaChat-Pro", maxTokens: 2500, temperature: 0.5 }
+    );
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: "" } }));
-    const msg = (err?.error?.message as string) ?? "";
-    return NextResponse.json({ error: rateLimitMessage(msg) }, { status: res.status });
-  }
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return NextResponse.json({ error: "Нет JSON в ответе", raw }, { status: 500 });
 
-  const data = await res.json();
-  const raw  = (data.choices?.[0]?.message?.content ?? "").trim();
-
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) return NextResponse.json({ error: "No JSON array in response", raw }, { status: 500 });
-
-  try {
     const items = JSON.parse(match[0]);
     const withIds = items.map((it: Record<string, unknown>) => ({ ...it, id: makeId() }));
     return NextResponse.json({ items: withIds });
-  } catch {
-    return NextResponse.json({ error: "Parse error", raw }, { status: 500 });
+  } catch (e) {
+    console.error("[board/ai]", e);
+    return NextResponse.json({ error: "AI временно недоступен. Доска работает в обычном режиме." }, { status: 503 });
   }
 }

@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeAiRequest } from "@/lib/aiUsage";
-
-const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
-
-// Parse friendly retry message from Groq rate limit error
-function rateLimitMessage(msg: string): string {
-  const m = msg.match(/Please try again in (\d+(?:\.\d+)?)s/);
-  return m
-    ? `Слишком много запросов. Подождите ${Math.ceil(parseFloat(m[1]))} сек. и попробуйте снова.`
-    : "Слишком много запросов. Подождите немного и попробуйте снова.";
-}
+import { gigachatComplete } from "@/lib/gigachat";
 
 const systemPrompts: Record<string, string> = {
   reference: `Ты помощник репетитора. Выполняй точно то, о чём просят — не добавляй лишнего.
@@ -71,36 +62,19 @@ export async function POST(req: NextRequest) {
   if (!usage.ok) return NextResponse.json({ error: usage.error }, { status: 429 });
 
   const system = systemPrompts[mode] ?? systemPrompts.reference;
-  // Short outputs (hints/examples) → fast 8b model with higher free TPM limit
-  const model = (mode === "vocabulary_example" || mode === "vocabulary_hint")
-    ? "llama-3.1-8b-instant"
-    : "llama-3.3-70b-versatile";
   const maxTokens = mode === "trainer_cards" ? 1800 : mode === "vocabulary_set" ? 1000 : mode === "reference" ? 1000 : 400;
 
-  const res = await fetch(GROQ_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
+  try {
+    const text = await gigachatComplete(
+      [
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
-      max_tokens: maxTokens,
-      temperature: 0.6,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: "" } }));
-    const msg = (err?.error?.message as string) ?? "";
-    return NextResponse.json({ error: rateLimitMessage(msg) }, { status: res.status });
+      { model: "GigaChat-Pro", maxTokens, temperature: 0.6 }
+    );
+    return NextResponse.json({ text, remaining: usage.remaining });
+  } catch (e) {
+    console.error("[ai]", e);
+    return NextResponse.json({ error: "AI временно недоступен. Попробуйте позже." }, { status: 503 });
   }
-
-  const data = await res.json();
-  const text = (data.choices?.[0]?.message?.content ?? "").trim();
-  return NextResponse.json({ text, remaining: usage.remaining });
 }
