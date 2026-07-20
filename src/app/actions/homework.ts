@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { pushToStudent } from "@/lib/push";
+import { notifyStudent } from "@/lib/notifications/send";
 
 export async function createHomework(formData: FormData): Promise<void> {
   const supabase = await createClient();
@@ -27,14 +27,15 @@ export async function createHomework(formData: FormData): Promise<void> {
   });
   if (error) redirect("/tutor/homework/new?error=1");
 
-  // Пуш ученику (не блокируем редирект)
-  pushToStudent(student_id, {
-    title: "Новое домашнее задание 📝",
-    body:  due_date
+  // Уведомление ученику (не блокируем редирект)
+  notifyStudent(student_id, {
+    title:      "Новое домашнее задание",
+    body:       due_date
       ? `«${title}» — сдать до ${new Date(due_date).toLocaleDateString("ru", { day: "numeric", month: "long" })}`
       : `«${title}»`,
-    url:  "/student",
-    tag:  "homework-new",
+    action_url: "/student",
+    type:       "homework-new",
+    emoji:      "📝",
   }).catch(() => {});
 
   revalidatePath("/tutor/homework");
