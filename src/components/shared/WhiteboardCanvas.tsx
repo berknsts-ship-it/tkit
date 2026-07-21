@@ -1801,7 +1801,8 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
       const tag = document.activeElement?.tagName;
-      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+        || !!(document.activeElement as HTMLElement | null)?.isContentEditable;
 
       if (e.code === "Space" && !e.repeat && !inInput)
         { e.preventDefault(); spaceRef.current = true; setSpaceHeld(true); }
@@ -1857,7 +1858,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       // Arrow keys — pan board (or nudge selected items)
       if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key) && !inInput) {
         e.preventDefault();
-        const STEP = e.shiftKey ? 80 : 20;
+        const STEP = e.shiftKey ? 200 : 50;
         const panDx = e.key==="ArrowLeft" ? STEP : e.key==="ArrowRight" ? -STEP : 0;
         const panDy = e.key==="ArrowUp"   ? STEP : e.key==="ArrowDown"  ? -STEP : 0;
         setSelectedIds(ids => {
@@ -1879,6 +1880,27 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
           applyView(zoom, panX + panDx, panY + panDy);
           return ids;
         });
+      }
+
+      // Keyboard zoom: +/= in, - out, 0 reset
+      if (!inInput && !e.ctrlKey && !e.metaKey) {
+        if (e.key === "+" || e.key === "=") {
+          e.preventDefault();
+          const r = canvasRef.current?.getBoundingClientRect();
+          zoomAt(r ? r.width / 2 : 400, r ? r.height / 2 : 300, 1.15);
+        }
+        if (e.key === "-") {
+          e.preventDefault();
+          const r = canvasRef.current?.getBoundingClientRect();
+          zoomAt(r ? r.width / 2 : 400, r ? r.height / 2 : 300, 1 / 1.15);
+        }
+        if (e.key === "0") {
+          e.preventDefault();
+          const r = canvasRef.current?.getBoundingClientRect();
+          const cx = r ? r.width / 2 : 400, cy = r ? r.height / 2 : 300;
+          const { zoom: curZ, panX: px, panY: py } = viewRef.current;
+          applyView(1, cx - (cx - px) / curZ, cy - (cy - py) / curZ);
+        }
       }
     };
     const ku = (e: KeyboardEvent) => { if (e.code==="Space") { spaceRef.current=false; setSpaceHeld(false); } };
@@ -2202,7 +2224,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       }
     }
     stopInertia();
-    if (e.button === 1 || spaceRef.current || tool === "hand") {
+    if (e.button === 1 || e.button === 2 || spaceRef.current || tool === "hand") {
       const { cx, cy } = clientXY(e);
       panning.current = true;
       panOrigin.current = { cx, cy, vx: viewRef.current.panX, vy: viewRef.current.panY };
@@ -4840,6 +4862,7 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
+        onContextMenu={e => e.preventDefault()}
         onMouseLeave={() => {
           panning.current=false; livePathRef.current=null; selDragRef.current=null;
           eraserActiveRef.current=false; setEraserPos(null);
