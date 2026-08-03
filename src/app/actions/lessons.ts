@@ -39,7 +39,12 @@ export async function setLessonSubscription(id: string, subscriptionId: string |
     .single();
   if (fetchErr || !lesson) return { error: "Урок не найден" };
 
-  const { error } = await supabase.from("lessons").update({ subscription_id: subscriptionId }).eq("id", id);
+  const update: { subscription_id: string | null; payment_status?: string } = { subscription_id: subscriptionId };
+  if (subscriptionId) {
+    const { data: sub } = await supabase.from("student_subscriptions").select("paid").eq("id", subscriptionId).single();
+    if (sub?.paid) update.payment_status = "paid";
+  }
+  const { error } = await supabase.from("lessons").update(update).eq("id", id);
   if (error) return { error: error.message };
 
   if (subscriptionId && lesson.price_rub && !lesson.deducted_amount &&

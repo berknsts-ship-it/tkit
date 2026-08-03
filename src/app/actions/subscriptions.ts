@@ -52,19 +52,29 @@ export async function renewSubscription(subscriptionId: string, studentId: strin
   revalidatePath(`/tutor/students/${studentId}`);
 }
 
+// Абонемент оплачивается целиком одной суммой — если он оплачен, все уроки,
+// которые с него списываются, тоже фактически оплачены (деньги уже получены
+// вперёд). Синхронизируем payment_status у уже привязанных уроков в обе стороны.
 export async function toggleSubscriptionPaid(subscriptionId: string, studentId: string, current: boolean) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Не авторизован" };
 
   const db = createAdminClient();
+  const nextPaid = !current;
   const { error } = await db.from("student_subscriptions")
-    .update({ paid: !current })
+    .update({ paid: nextPaid })
     .eq("id", subscriptionId)
     .eq("tutor_id", user.id);
 
   if (error) return { error: error.message };
+
+  await db.from("lessons")
+    .update({ payment_status: nextPaid ? "paid" : "unpaid" })
+    .eq("subscription_id", subscriptionId);
+
   revalidatePath(`/tutor/students/${studentId}`);
+  revalidatePath("/tutor/schedule");
 }
 
 export async function cancelSubscription(subscriptionId: string, studentId: string) {

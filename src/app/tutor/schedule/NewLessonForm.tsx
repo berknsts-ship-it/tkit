@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 interface Student     { id: string; name: string; default_price_rub?: number | null; }
 interface Group       { id: string; name: string; }
-interface Subscription { id: string; student_id: string; balance: number; name: string; }
+interface Subscription { id: string; student_id: string; balance: number; name: string; paid?: boolean; }
 
 export default function NewLessonForm({
   students, subscriptions = [], groups = [],
@@ -83,6 +83,7 @@ export default function NewLessonForm({
         price_rub:       price ? parseInt(price) : null,
         notes:           notes || null,
         subscription_id: activeSub?.id ?? null,
+        ...(activeSub?.paid ? { payment_status: "paid" } : {}),
       });
 
       setLoading(false);
