@@ -27,6 +27,32 @@ export async function updateLessonStatus(id: string, status: string) {
   revalidatePath("/tutor/schedule");
 }
 
+// Ручная (пере)привязка урока к абонементу — нужна для уроков, добавленных до
+// того как абонемент был создан (авто-привязка срабатывает только в момент
+// создания урока). Если урок уже проведён/сгорел и ещё не был списан — списываем
+// сразу; если уже списан — просто меняем связь, баланс не трогаем (не задваиваем).
+export async function setLessonSubscription(id: string, subscriptionId: string | null) {
+  const supabase = await createClient();
+  const { data: lesson, error: fetchErr } = await supabase.from("lessons")
+    .select("status, price_rub, deducted_amount")
+    .eq("id", id)
+    .single();
+  if (fetchErr || !lesson) return { error: "Урок не найден" };
+
+  const { error } = await supabase.from("lessons").update({ subscription_id: subscriptionId }).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (subscriptionId && lesson.price_rub && !lesson.deducted_amount &&
+      (lesson.status === "completed" || lesson.status === "missed")) {
+    const db = createAdminClient();
+    await db.from("lessons").update({ deducted_amount: lesson.price_rub }).eq("id", id);
+    await db.rpc("subscription_deduct", { p_id: subscriptionId, p_amount: lesson.price_rub });
+    revalidatePath("/tutor/students");
+  }
+
+  revalidatePath("/tutor/schedule");
+}
+
 export async function rescheduleLesson(id: string, rescheduledTo: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("lessons")

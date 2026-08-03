@@ -82,7 +82,7 @@ export default async function SchedulePage({
             <p className="text-sm mb-6" style={{ color: "var(--brown-light)" }}>Нет запланированных занятий</p>
           ) : (
             <div className="space-y-2 mb-6">
-              {upcoming.map(l => <LessonCard key={l.id} lesson={l} />)}
+              {upcoming.map(l => <LessonCard key={l.id} lesson={l} subscriptions={subscriptions ?? []} />)}
             </div>
           )}
 
@@ -90,7 +90,7 @@ export default async function SchedulePage({
             <>
               <h2 className="font-semibold mb-3" style={{ color: "var(--brown-light)" }}>История</h2>
               <div className="space-y-2">
-                {past.map(l => <LessonCard key={l.id} lesson={l} />)}
+                {past.map(l => <LessonCard key={l.id} lesson={l} subscriptions={subscriptions ?? []} />)}
               </div>
             </>
           )}

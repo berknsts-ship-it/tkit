@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateLessonStatus, rescheduleLesson, togglePaymentStatus, updateLesson, deleteLesson } from "@/app/actions/lessons";
+import { updateLessonStatus, rescheduleLesson, togglePaymentStatus, updateLesson, deleteLesson, setLessonSubscription } from "@/app/actions/lessons";
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 type Status = "scheduled" | "completed" | "cancelled" | "rescheduled" | "missed";
@@ -25,6 +25,7 @@ const ACTIONS: { status: Status; label: string }[] = [
 
 interface Lesson {
   id: string;
+  student_id?: string | null;
   status: Status;
   scheduled_at: string;
   rescheduled_to?: string | null;
@@ -34,9 +35,13 @@ interface Lesson {
   groups?: { name: string } | null;
   payment_status?: PayStatus;
   price_rub?: number | null;
+  subscription_id?: string | null;
+  deducted_amount?: number | null;
 }
 
-export default function LessonCard({ lesson }: { lesson: Lesson }) {
+interface Subscription { id: string; student_id: string; name: string }
+
+export default function LessonCard({ lesson, subscriptions = [] }: { lesson: Lesson; subscriptions?: Subscription[] }) {
   const [open,        setOpen]       = useState(false);
   const [status,      setStatus]     = useState<Status>(lesson.status);
   const [payStatus,   setPayStatus]  = useState<PayStatus>(lesson.payment_status ?? "unpaid");
@@ -60,7 +65,10 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
   const [editDuration, setEditDuration] = useState(String(lesson.duration_min ?? 60));
   const [editPrice,    setEditPrice]    = useState(lesson.price_rub ? String(lesson.price_rub) : "");
   const [editNotes,    setEditNotes]    = useState(lesson.notes ?? "");
+  const [editSubId,    setEditSubId]    = useState(lesson.subscription_id ?? "");
   const [editLoading,  setEditLoading]  = useState(false);
+
+  const studentSubs = lesson.student_id ? subscriptions.filter(s => s.student_id === lesson.student_id) : [];
 
   const cfg  = STATUS_CONFIG[status] ?? STATUS_CONFIG.scheduled;
   const dt   = new Date(lesson.scheduled_at);
@@ -115,6 +123,9 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
       price_rub:    editPrice ? parseInt(editPrice) : null,
       notes:        editNotes.trim() || null,
     });
+    if (editSubId !== (lesson.subscription_id ?? "")) {
+      await setLessonSubscription(lesson.id, editSubId || null);
+    }
     setEditLoading(false);
     setEditMode(false);
   };
@@ -312,6 +323,18 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
               placeholder="Тема, домашнее задание..."
               className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}/>
           </div>
+          {studentSubs.length > 0 && (
+            <div className="col-span-2 sm:col-span-4">
+              <label className="text-xs mb-1 block" style={{ color: "var(--brown-light)" }}>
+                Абонемент {lesson.deducted_amount ? "(уже списан — смена не изменит баланс)" : ""}
+              </label>
+              <select value={editSubId} onChange={e => setEditSubId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border outline-none text-sm" style={inputStyle}>
+                <option value="">— без абонемента —</option>
+                {studentSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="col-span-2 sm:col-span-4 flex gap-2">
             <button onClick={submitEdit} disabled={editLoading}
               className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
