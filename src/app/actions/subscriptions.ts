@@ -52,6 +52,21 @@ export async function renewSubscription(subscriptionId: string, studentId: strin
   revalidatePath(`/tutor/students/${studentId}`);
 }
 
+export async function toggleSubscriptionPaid(subscriptionId: string, studentId: string, current: boolean) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Не авторизован" };
+
+  const db = createAdminClient();
+  const { error } = await db.from("student_subscriptions")
+    .update({ paid: !current })
+    .eq("id", subscriptionId)
+    .eq("tutor_id", user.id);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/tutor/students/${studentId}`);
+}
+
 export async function cancelSubscription(subscriptionId: string, studentId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

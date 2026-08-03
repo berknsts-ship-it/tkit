@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { renewSubscription, cancelSubscription } from "@/app/actions/subscriptions";
+import { renewSubscription, cancelSubscription, toggleSubscriptionPaid } from "@/app/actions/subscriptions";
 
 interface Lesson {
   id: string;
@@ -20,6 +20,7 @@ interface Sub {
   total_amount: number;
   balance: number;
   created_at: string;
+  paid?: boolean;
 }
 
 interface Student {
@@ -44,6 +45,9 @@ export default function SubscriptionCard({
   const [cancelling, setCancelling] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paid, setPaid] = useState(sub.paid ?? false);
+  const [payLoading, setPayLoading] = useState(false);
+  const [confirmUnpay, setConfirmUnpay] = useState(false);
 
   const ls = lessons as unknown as Lesson[];
   const spent = sub.total_amount - sub.balance;
@@ -68,6 +72,22 @@ export default function SubscriptionCard({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleTogglePaid() {
+    if (paid) { setConfirmUnpay(true); return; }
+    setPayLoading(true);
+    await toggleSubscriptionPaid(sub.id, studentId, paid);
+    setPaid(true);
+    setPayLoading(false);
+  }
+
+  async function confirmUnmarkPaid() {
+    setConfirmUnpay(false);
+    setPayLoading(true);
+    await toggleSubscriptionPaid(sub.id, studentId, paid);
+    setPaid(false);
+    setPayLoading(false);
   }
 
   async function handleCancel() {
@@ -110,6 +130,29 @@ export default function SubscriptionCard({
           </div>
         </div>
       </div>
+
+      {/* Оплата абонемента целиком */}
+      {!confirmUnpay ? (
+        <button
+          onClick={handleTogglePaid}
+          disabled={payLoading}
+          className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
+          style={{
+            background: paid ? "#d8f5e0" : "#fff3e0",
+            color:      paid ? "#1a7a3a" : "#c07800",
+            border:     `1.5px solid ${paid ? "#b0e8c0" : "#f0d090"}`,
+          }}>
+          {payLoading ? "..." : paid ? "✓ Абонемент оплачен" : "₽ Абонемент не оплачен"}
+        </button>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-sm flex-1" style={{ color: "var(--brown-mid)" }}>Снять отметку об оплате абонемента?</span>
+          <button onClick={confirmUnmarkPaid} className="text-sm px-3 py-1.5 rounded-lg font-semibold text-white"
+            style={{ background: "#e05030" }}>Снять</button>
+          <button onClick={() => setConfirmUnpay(false)} className="text-sm px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: "var(--brown-pale)", color: "var(--brown-mid)" }}>Отмена</button>
+        </div>
+      )}
 
       {/* Прогресс */}
       <div>
