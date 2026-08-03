@@ -2161,8 +2161,15 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
       const myDisplayName = myName ?? (role === "tutor" ? "Репетитор" : (studentName ?? "Ученик"));
       localCh = supabase
         .channel(`board-${roomId}`, { config: { broadcast: { self: false }, presence: { key: mySenderIdRef.current } } })
-        .on("broadcast", { event: "draw" }, handler)
-        .on("presence", { event: "sync" }, () => {
+        .on("broadcast", { event: "draw" }, handler);
+
+      // Supabase dedupes channels by topic within one client — if anything else
+      // (a remount racing the cleanup, another mounted instance for this room)
+      // already subscribed a channel with this exact topic, registering presence
+      // callbacks on it throws synchronously. Not fatal — degrade gracefully
+      // instead of taking the whole page down.
+      try {
+        localCh = localCh.on("presence", { event: "sync" }, () => {
           const state = localCh!.presenceState<Participant>();
           const map = new Map<string, Participant>();
           for (const key in state) {
@@ -2170,13 +2177,21 @@ function WhiteboardCanvas({ roomId, role = "student", materials = [], currentStu
             if (entry) map.set(entry.id, entry);
           }
           setParticipants(map);
-        })
-        .subscribe(async s => {
-          setConnected(s === "SUBSCRIBED");
-          if (s === "SUBSCRIBED") {
-            await localCh!.track({ id: mySenderIdRef.current, name: myDisplayName, color: myColor, role } satisfies Participant);
-          }
         });
+      } catch (e) {
+        console.warn("[board] presence already registered on this channel", e);
+      }
+
+      localCh.subscribe(async s => {
+        setConnected(s === "SUBSCRIBED");
+        if (s === "SUBSCRIBED") {
+          try {
+            await localCh!.track({ id: mySenderIdRef.current, name: myDisplayName, color: myColor, role } satisfies Participant);
+          } catch (e) {
+            console.warn("[board] presence track failed", e);
+          }
+        }
+      });
       channelRef.current = localCh;
     }
 
