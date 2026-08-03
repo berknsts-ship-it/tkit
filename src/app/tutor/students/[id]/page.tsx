@@ -17,7 +17,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   const [{ data: student }, { data: subscriptions }] = await Promise.all([
     db.from("students").select("*").eq("id", id).eq("tutor_id", tutorId).single(),
-    db.from("subscriptions").select("*").eq("student_id", id).eq("tutor_id", tutorId).order("created_at", { ascending: false }),
+    db.from("student_subscriptions").select("*").eq("student_id", id).eq("tutor_id", tutorId).order("created_at", { ascending: false }),
   ]);
 
   if (!student) redirect("/tutor/students");

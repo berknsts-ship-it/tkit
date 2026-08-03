@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { renewSubscription, cancelSubscription } from "@/app/actions/subscriptions";
 
 interface Lesson {
@@ -37,6 +38,7 @@ export default function SubscriptionCard({
   lessons: Record<string, unknown>[];
   studentId: string;
 }) {
+  const router = useRouter();
   const [renewMode, setRenewMode] = useState(false);
   const [addAmount, setAddAmount] = useState("");
   const [cancelling, setCancelling] = useState(false);
@@ -60,6 +62,7 @@ export default function SubscriptionCard({
     try {
       const result = await renewSubscription(sub.id, studentId, fd);
       if (result?.error) setError(result.error);
+      else { setRenewMode(false); setAddAmount(""); router.refresh(); }
     } catch {
       setError("Не удалось пополнить");
     } finally {
@@ -74,6 +77,7 @@ export default function SubscriptionCard({
     try {
       const result = await cancelSubscription(sub.id, studentId);
       if (result?.error) setError(result.error);
+      else router.refresh();
     } catch {
       setError("Не удалось отменить");
     } finally {

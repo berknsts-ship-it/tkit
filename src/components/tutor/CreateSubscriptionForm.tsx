@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createSubscription } from "@/app/actions/subscriptions";
 import { CreditCard } from "lucide-react";
 
@@ -11,6 +12,7 @@ const PRESETS = [
 ];
 
 export default function CreateSubscriptionForm({ studentId, studentName }: { studentId: string; studentName: string }) {
+  const router = useRouter();
   const [name, setName]       = useState("");
   const [amount, setAmount]   = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,6 +29,7 @@ export default function CreateSubscriptionForm({ studentId, studentName }: { stu
       fd.set("total_amount", amount);
       const result = await createSubscription(studentId, fd);
       if (result?.error) setError(result.error);
+      else router.refresh();
     } catch {
       setError("Не удалось создать абонемент");
     } finally {

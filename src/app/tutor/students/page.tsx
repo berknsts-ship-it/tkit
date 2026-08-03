@@ -21,7 +21,7 @@ export default async function StudentsPage() {
       .select("student_id, payment_status, price_rub, status, subscription_id")
       .eq("tutor_id", tutorId)
       .neq("status", "cancelled"),
-    db.from("subscriptions").select("student_id, balance, total_amount, name, status").eq("tutor_id", tutorId),
+    db.from("student_subscriptions").select("student_id, balance, total_amount, name, status").eq("tutor_id", tutorId),
   ]);
 
   // Долг по поурочным урокам (без абонемента)
